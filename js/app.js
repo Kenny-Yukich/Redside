@@ -11,6 +11,28 @@ const el = (html) => { const t = document.createElement("template"); t.innerHTML
 const driveStr = (m) => (m < 60 ? `${m} min` : `${(m / 60).toFixed(m % 60 ? 1 : 0)} hr`);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
+function manageDialog(root, initialFocus) {
+  const returnFocus = document.activeElement;
+  const selector = "button, a[href], input, select, textarea, [tabindex]:not([tabindex='-1'])";
+  const close = () => {
+    document.removeEventListener("keydown", onKeydown);
+    root.remove();
+    if (returnFocus?.focus) returnFocus.focus();
+  };
+  const onKeydown = (e) => {
+    if (e.key === "Escape") { e.preventDefault(); close(); return; }
+    if (e.key !== "Tab") return;
+    const focusable = [...root.querySelectorAll(selector)].filter((node) => !node.disabled);
+    if (!focusable.length) return;
+    const first = focusable[0], last = focusable[focusable.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  };
+  document.addEventListener("keydown", onKeydown);
+  requestAnimationFrame(() => root.querySelector(initialFocus)?.focus());
+  return close;
+}
+
 // Turn <term>x</term> markup into tappable glossary buttons.
 function terms(html) {
   return html.replace(/<term>(.*?)<\/term>/g, (_, w) => {
@@ -34,16 +56,36 @@ async function sync(render) {
 }
 function updateSyncPill() {
   const p = document.getElementById("sync-pill");
+  const button = document.getElementById("resync");
+  if (button) {
+    button.disabled = syncing;
+    button.classList.toggle("busy", syncing);
+    button.innerHTML = syncing
+      ? `<span class="sync-icon" aria-hidden="true"></span>Syncing`
+      : `<span class="sync-icon" aria-hidden="true"></span>Refresh`;
+  }
   if (!p) return;
-  if (!navigator.onLine) { p.textContent = "Offline — showing last sync"; p.className = "sync-pill offline"; return; }
-  p.textContent = syncing ? "Syncing conditions…" : "Conditions up to date";
+  const latestTs = Math.max(0, ...WATERS.map((w) => cachedFor(w.id)?.ts || 0));
+  const age = latestTs ? ageLabel(latestTs) : "not synced yet";
+  if (!navigator.onLine) { p.textContent = `Offline · saved ${age}`; p.className = "sync-pill offline"; return; }
+  p.textContent = syncing ? "Updating conditions…" : `Updated ${age}`;
   p.className = "sync-pill" + (syncing ? " busy" : "");
 }
 
 // ---- Bite-score dial (SVG) --------------------------------------------------
+function scoreLabel(score) {
+  if (score >= 85) return "Excellent";
+  if (score >= 70) return "Strong";
+  if (score >= 45) return "Fair";
+  if (score >= 25) return "Slow";
+  return "Poor";
+}
+
 function dial(score, band, size = 64) {
   const r = size / 2 - 6, c = 2 * Math.PI * r, off = c * (1 - score / 100);
-  return `<svg class="dial ${band}" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" aria-hidden="true">
+  const label = `${score} out of 100, ${scoreLabel(score)}`;
+  return `<svg class="dial ${band}" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" role="img" aria-label="${label}">
+    <title>${label}</title>
     <circle cx="${size/2}" cy="${size/2}" r="${r}" class="dial-track"/>
     <circle cx="${size/2}" cy="${size/2}" r="${r}" class="dial-fill"
       stroke-dasharray="${c}" stroke-dashoffset="${off}"
@@ -52,22 +94,95 @@ function dial(score, band, size = 64) {
   </svg>`;
 }
 
+function scoreDial(score, band, size = 64) {
+  return `<span class="score-dial">${dial(score, band, size)}<span class="score-label ${band}">${scoreLabel(score)}</span></span>`;
+}
+
+function targetFor(water) {
+  return water.species.find((s) => s.rank === "signature" || s.rank === "primary");
+}
+
+function conditionBits(result) {
+  const c = cachedFor(result.water.id);
+  const bits = [];
+  if (c?.flow?.flowCfs != null) bits.push(`${c.flow.flowCfs.toLocaleString()} cfs`);
+  if (c?.weather) bits.push(`${skyLabel(c.weather.today?.code)}, ${c.weather.today?.hi}°/${c.weather.today?.lo}°`);
+  if (c?.weather?.today?.windMax != null) bits.push(`wind ${c.weather.today.windMax} mph`);
+  return bits;
+}
+
+const TACKLE_CATALOG = [
+  { terms: ["wedding ring"], label: "Wedding ring", icon: "spinner" },
+  { terms: ["dodger"], label: "Dodger", icon: "dodger" },
+  { terms: ["powerbait"], label: "PowerBait", icon: "bait" },
+  { terms: ["white corn", "shoepeg corn", "corn"], label: "White corn", icon: "corn" },
+  { terms: ["worm"], label: "Worm", icon: "worm" },
+  { terms: ["soft-plastic", "soft plastic", "grub"], label: "Soft plastic", icon: "grub" },
+  { terms: ["crankbait", "plug"], label: "Crankbait", icon: "plug" },
+  { terms: ["streamer"], label: "Streamer", icon: "fly" },
+  { terms: ["dry fly"], label: "Dry fly", icon: "dry-fly" },
+  { terms: ["nymph", "chironomid"], label: "Nymph", icon: "nymph" },
+  { terms: ["spinner"], label: "Spinner", icon: "spinner" },
+  { terms: ["spoon"], label: "Spoon", icon: "spoon" },
+  { terms: ["hoochie"], label: "Hoochie", icon: "hoochie" },
+];
+
+function tackleIcon(type) {
+  const art = {
+    spinner: `<path d="M8 27h10m4 0h7"/><circle cx="19" cy="27" r="2.5" class="accent-fill"/><path d="M29 27c6-10 13-9 12-2-1 5-6 7-12 2Z" class="soft-fill"/><path d="M8 27c-5 0-5 8 0 8 4 0 5-4 2-6"/>`,
+    dodger: `<path d="M11 18c8-6 22-6 30 0l-4 19c-9 5-17 5-26 0Z" class="soft-fill"/><path d="m17 23 17 9M15 30l15 7"/><circle cx="12" cy="18" r="2"/><circle cx="37" cy="37" r="2"/>`,
+    bait: `<path d="M15 18h22l2 5v17H13V23Z" class="soft-fill"/><path d="M16 14h20v6H16z"/><circle cx="21" cy="29" r="2" class="accent-fill"/><circle cx="29" cy="34" r="2" class="accent-fill"/><circle cx="34" cy="27" r="1.5" class="accent-fill"/>`,
+    corn: `<path d="M14 37c8-18 17-21 26-19-1 12-8 22-20 23Z" class="soft-fill"/><circle cx="24" cy="29" r="2.5" class="accent-fill"/><circle cx="31" cy="25" r="2.5" class="accent-fill"/><circle cx="29" cy="33" r="2.5" class="accent-fill"/>`,
+    worm: `<path d="M8 33c8-19 15 10 24-9 5-10 12-3 10 5" class="thick"/><path d="M38 29c0 5 5 8 8 3"/>`,
+    grub: `<path d="M10 27h22c8 0 10 12 3 15-5 2-8-3-5-7" class="thick"/><path d="M9 21v13M5 21h8"/><circle cx="25" cy="27" r="2" class="accent-fill"/>`,
+    plug: `<path d="M8 28c8-10 23-12 32-3-4 11-20 14-32 3Z" class="soft-fill"/><circle cx="33" cy="25" r="1.6" class="accent-fill"/><path d="m9 29-5 7M18 35c0 6 6 6 7 1M32 34c0 6 6 6 7 1"/>`,
+    fly: `<path d="M11 29h29M24 29c-8-11-14-7-10 1m11-1c6-12 14-8 11 0"/><path d="m18 24 12 10M18 34l12-10"/><path d="M39 29c0 7 7 8 9 2"/>`,
+    "dry-fly": `<path d="M9 31h32M22 30c-10-14-16-7-9 0m11 0c7-15 18-7 10 1"/><path d="m13 24 17 13m-13 1 12-14"/><path d="M40 31c0 6 6 7 8 2"/>`,
+    nymph: `<path d="M12 29h29M18 25l-5-6m9 6 1-8m4 8 6-6m-14 13-5 6m10-6 1 7m5-7 6 5"/><ellipse cx="25" cy="29" rx="10" ry="5" class="soft-fill"/><path d="M40 29c0 7 6 8 8 2"/>`,
+    spoon: `<path d="M12 17c15 0 25 8 25 18-15 2-27-6-25-18Z" class="soft-fill"/><circle cx="14" cy="19" r="2"/><path d="M37 35c1 7 8 8 10 2"/>`,
+    hoochie: `<path d="M17 17h18l3 9H14Z" class="soft-fill"/><path d="M17 27 12 42m10-15-2 16m7-16 2 16m3-16 7 14"/><circle cx="22" cy="22" r="1.5" class="accent-fill"/><circle cx="30" cy="22" r="1.5" class="accent-fill"/>`,
+  };
+  return `<svg class="tackle-icon" viewBox="0 0 52 52" aria-hidden="true">${art[type] || art.spoon}</svg>`;
+}
+
+function tackleGuide(species) {
+  const copy = `${species.how} ${species.gear}`.toLowerCase();
+  const picks = TACKLE_CATALOG.filter((item) => item.terms.some((term) => copy.includes(term))).slice(0, 4);
+  if (!picks.length) return "";
+  return `<div class="tackle-guide">
+    <div class="tackle-head"><span>Quick tackle pick</span><span>not to scale</span></div>
+    <div class="tackle-grid">${picks.map((item) => `<figure class="tackle-item"><span class="tackle-art">${tackleIcon(item.icon)}</span><figcaption>${esc(item.label)}</figcaption></figure>`).join("")}</div>
+  </div>`;
+}
+
 // ===== TODAY =================================================================
 let driveFilter = 45; // "after-work" default; Infinity for "anywhere"
 function viewToday() {
   const now = new Date();
-  const { text, ranked } = recommend(now, driveFilter);
+  const { ranked } = recommend(now, driveFilter);
   const dateStr = now.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" });
+  const top = ranked[0];
 
-  const cards = ranked.map((r) => {
-    const w = r.water, c = cachedFor(w.id);
-    const bits = [];
-    if (c?.flow?.flowCfs != null) bits.push(`${c.flow.flowCfs.toLocaleString()} cfs`);
-    if (c?.weather) bits.push(`${skyLabel(c.weather.today?.code)}, ${c.weather.today?.hi}°/${c.weather.today?.lo}°`);
-    if (c?.weather?.today?.windMax != null) bits.push(`wind ${c.weather.today.windMax}`);
-    const target = w.species.find((s) => s.rank === "signature" || s.rank === "primary");
+  const bestBet = top ? (() => {
+    const w = top.water;
+    const target = targetFor(w);
+    const bits = conditionBits(top);
+    return `<a class="best-bet" href="#/water/${w.id}">
+      <div class="best-bet-top"><span class="best-kicker">Best bet</span><span class="best-drive">${driveStr(w.driveMin)} away</span></div>
+      <div class="best-bet-main">
+        <div class="best-bet-copy"><h2>${esc(w.name)}</h2><p>${target ? `Go for ${esc(target.name.toLowerCase())}` : esc(w.tagline)}</p></div>
+        ${scoreDial(top.score, top.band, 68)}
+      </div>
+      <div class="best-bet-bottom"><span>${bits.map(esc).join(" · ") || "Seasonal score · live conditions pending"}</span><strong>View plan <span aria-hidden="true">›</span></strong></div>
+    </a>`;
+  })() : "";
+
+  const cards = ranked.slice(1).map((r) => {
+    const w = r.water;
+    const bits = conditionBits(r);
+    const target = targetFor(w);
     return `<a class="card water-card" href="#/water/${w.id}">
-      ${dial(r.score, r.band)}
+      ${scoreDial(r.score, r.band)}
       <div class="card-body">
         <div class="card-top"><h3>${esc(w.name)}</h3><span class="drive">${driveStr(w.driveMin)}</span></div>
         <p class="card-sub">${target ? "Go for " + esc(target.name.toLowerCase()) : esc(w.tagline)}</p>
@@ -79,18 +194,19 @@ function viewToday() {
 
   const v = el(`<section class="view">
     <header class="hero">
-      <div class="hero-eyebrow">Central Oregon · ${esc(dateStr)}</div>
-      <h1 class="hero-title">Where to fish</h1>
-      <p id="sync-pill" class="sync-pill">Checking…</p>
-      <div class="reco"><span class="reco-slash"></span><p>${esc(text)}</p></div>
-      <button class="score-info-link" id="scoreInfo">How's this scored? ›</button>
+      <div class="hero-topline"><div class="hero-eyebrow">Central Oregon · ${esc(dateStr)}</div><p id="sync-pill" class="sync-pill" aria-live="polite">Checking…</p></div>
+      <h1 class="hero-title">Where to fish today</h1>
+      ${bestBet}
+      <div class="hero-foot"><p>${esc(top?.reasons?.[0]?.text || "Widen your drive range to see more water.")}</p><button class="score-info-link" id="scoreInfo">How scoring works</button></div>
     </header>
-    <div class="filter-row">
-      <button class="chip ${driveFilter===45?"on":""}" data-drive="45">Within 45 min</button>
-      <button class="chip ${driveFilter===Infinity?"on":""}" data-drive="inf">Anywhere</button>
-      <button class="chip ghost" id="resync">Sync now</button>
+    <div class="today-tools">
+      <div class="drive-toggle" role="group" aria-label="Maximum drive time">
+        <button class="chip ${driveFilter===45?"on":""}" data-drive="45" aria-pressed="${driveFilter===45}">Within 45 min</button>
+        <button class="chip ${driveFilter===Infinity?"on":""}" data-drive="inf" aria-pressed="${driveFilter===Infinity}">Anywhere</button>
+      </div>
+      <button class="sync-btn" id="resync"><span class="sync-icon" aria-hidden="true"></span>Refresh</button>
     </div>
-    <div class="cards">${cards}</div>
+    ${cards ? `<div class="list-head"><h2>Other options</h2><span>${ranked.length - 1} nearby</span></div><div class="cards">${cards}</div>` : ""}
   </section>`);
 
   v.querySelectorAll("[data-drive]").forEach((b) => b.onclick = () => {
@@ -107,14 +223,14 @@ function viewWaters() {
   const rows = WATERS.slice().sort((a,b)=>a.driveMin-b.driveMin).map((w) => {
     const r = scoreWater(w, now);
     return `<a class="card water-card" href="#/water/${w.id}">
-      ${dial(r.score, r.band, 52)}
+      ${scoreDial(r.score, r.band, 52)}
       <div class="card-body">
         <div class="card-top"><h3>${esc(w.name)}</h3><span class="drive">${driveStr(w.driveMin)}</span></div>
         <p class="card-sub">${esc(w.tagline)}</p>
       </div><span class="chev">›</span></a>`;
   }).join("");
   return el(`<section class="view">
-    <header class="page-head"><h1>Your waters</h1><p class="muted">Seven spots, sorted by drive from Madras.</p></header>
+    <header class="page-head scenic-head waters-head"><div><span class="scenic-kicker">Field guide</span><h1>Your waters</h1><p>Seven spots, sorted by drive from Madras.</p></div></header>
     <div class="cards">${rows}</div>
   </section>`);
 }
@@ -126,6 +242,12 @@ function viewWater(id) {
   const r = scoreWater(w);
   const c = cachedFor(w.id);
   const past = catchesForWater(w.id);
+  const backDestinations = {
+    "#/waters": ["#/waters", "Waters"],
+    "#/ask": ["#/ask", "Ask"],
+    "#/log": ["#/log", "Log"],
+  };
+  const [backHref, backLabel] = backDestinations[activeSection] || ["#/", "Today"];
 
   const cond = (() => {
     const items = [];
@@ -151,6 +273,7 @@ function viewWater(id) {
         ${s.beginner ? `<span class="tag beginner">beginner-friendly</span>` : ``}
       </div>
       <p class="lbl">How</p><p>${terms(s.how)}</p>
+      ${tackleGuide(s)}
       <p class="lbl">What to bring</p><p>${terms(s.gear)}</p>
       <p class="lbl">Best when</p><p>${esc(s.when)}</p>
     </div>`).join("");
@@ -174,9 +297,9 @@ function viewWater(id) {
     : `<div class="panel empty"><p>No catches logged here yet. When you catch one, log it — after a season this section becomes your own cheat sheet for this water.</p></div>`;
 
   const v = el(`<section class="view water-detail">
-    <a class="back" href="#/">‹ Today</a>
+    <a class="back" href="${backHref}">‹ ${backLabel}</a>
     <header class="water-hero">
-      ${dial(r.score, r.band, 76)}
+      ${scoreDial(r.score, r.band, 76)}
       <div><h1>${esc(w.name)}</h1><p class="muted">${esc(w.tagline)} · ${driveStr(w.driveMin)} from Madras</p></div>
     </header>
     <p class="intro">${esc(w.intro)}</p>
@@ -218,8 +341,8 @@ function viewLog() {
   const s = stats();
   const topWater = Object.entries(s.byWater).sort((a,b)=>b[1]-a[1])[0];
   const v = el(`<section class="view">
-    <header class="page-head"><h1>Catch log</h1>
-      <p class="muted">Stays on this phone. Export a backup before you switch devices.</p></header>
+    <header class="page-head scenic-head log-head"><div><span class="scenic-kicker">Your field notes</span><h1>Catch log</h1>
+      <p>Stays on this phone. Export a backup before you switch devices.</p></div></header>
     <div class="stat-row">
       <div class="stat"><span class="stat-num">${s.total}</span><span class="stat-lbl">caught</span></div>
       <div class="stat"><span class="stat-num">${Object.keys(s.byWater).length}</span><span class="stat-lbl">waters</span></div>
@@ -247,8 +370,8 @@ function viewLog() {
 // ===== ADVISOR ==============================================================
 function viewAdvisor() {
   const v = el(`<section class="view">
-    <header class="page-head"><h1>Ask</h1>
-      <p class="muted">Describe your day — time, target, how far you'll drive.</p></header>
+    <header class="page-head scenic-head ask-head"><div><span class="scenic-kicker">Local advisor</span><h1>Ask Redside</h1>
+      <p>Describe your day — time, target, how far you'll drive.</p></div></header>
     <div class="ask-chips">
       <button class="chip" data-q="I've got a couple hours after work, close to Madras.">After-work, close</button>
       <button class="chip" data-q="I want a shot at a trophy fish this weekend and don't mind driving.">Weekend trophy</button>
@@ -280,7 +403,7 @@ function viewAdvisor() {
 }
 function renderRec(text, ranked) {
   const top3 = ranked.slice(0,3).map((r)=>`
-    <a class="card water-card" href="#/water/${r.water.id}">${dial(r.score,r.band,52)}
+    <a class="card water-card" href="#/water/${r.water.id}">${scoreDial(r.score,r.band,52)}
       <div class="card-body"><div class="card-top"><h3>${esc(r.water.name)}</h3><span class="drive">${driveStr(r.water.driveMin)}</span></div>
       <p class="card-cond">${esc(r.reasons[0]?.text||"")}</p></div><span class="chev">›</span></a>`).join("");
   return `<div class="reco inline"><span class="reco-slash"></span><p>${esc(text)}</p></div><div class="cards">${top3}</div>`;
@@ -289,8 +412,8 @@ function renderRec(text, ranked) {
 // ===== Score explainer (modal) ==============================================
 function openScoreInfo() {
   const sheet = el(`<div class="scrim">
-    <div class="sheet info-sheet">
-      <div class="sheet-head"><h3>How the score works</h3><button class="x" id="closeInfo">✕</button></div>
+    <div class="sheet info-sheet" role="dialog" aria-modal="true" aria-labelledby="scoreInfoTitle">
+      <div class="sheet-head"><h3 id="scoreInfoTitle">How the score works</h3><button class="x" id="closeInfo" aria-label="Close score explanation">✕</button></div>
       <p>Every water gets a <strong>bite score from 0 to 100</strong>. It's an estimate built from real data — a read on whether the <em>conditions</em> are right, not a live report that fish are actually being caught.</p>
       <p class="lbl">What goes into it</p>
       <ul class="info-list">
@@ -309,7 +432,7 @@ function openScoreInfo() {
       <p class="muted small">It's a planning aid, not a guarantee — conditions being good doesn't promise the fish agree.</p>
     </div></div>`);
   document.body.appendChild(sheet);
-  const close = () => sheet.remove();
+  const close = manageDialog(sheet, "#closeInfo");
   sheet.querySelector("#closeInfo").onclick = close;
   sheet.onclick = (e) => { if (e.target === sheet) close(); };
 }
@@ -320,8 +443,8 @@ function openLogSheet(water) {
   const opts = WATERS.map((w)=>`<option value="${w.id}" ${water&&w.id===water.id?"selected":""}>${esc(w.name)}</option>`).join("");
   const speciesOpts = water ? water.species.map((s)=>`<option>${esc(s.name)}</option>`).join("") : WATERS.flatMap(w=>w.species.map(s=>s.name)).filter((v,i,a)=>a.indexOf(v)===i).map(n=>`<option>${esc(n)}</option>`).join("");
   const sheet = el(`<div class="scrim">
-    <div class="sheet">
-      <div class="sheet-head"><h3>Log a catch</h3><button class="x" id="closeSheet">✕</button></div>
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="logSheetTitle">
+      <div class="sheet-head"><h3 id="logSheetTitle">Log a catch</h3><button class="x" id="closeSheet" aria-label="Close catch log">✕</button></div>
       <label>Date<input type="date" id="f-date" value="${today}"></label>
       <label>Water<select id="f-water">${opts}</select></label>
       <label>Species<input list="f-species-list" id="f-species" placeholder="e.g. Rainbow trout"><datalist id="f-species-list">${speciesOpts}</datalist></label>
@@ -333,7 +456,7 @@ function openLogSheet(water) {
       <button class="btn primary wide" id="saveCatch">Save</button>
     </div></div>`);
   document.body.appendChild(sheet);
-  const close = () => sheet.remove();
+  const close = manageDialog(sheet, "#f-date");
   sheet.querySelector("#closeSheet").onclick = close;
   sheet.onclick = (e) => { if (e.target === sheet) close(); };
   sheet.querySelector("#saveCatch").onclick = () => {
@@ -358,9 +481,9 @@ document.addEventListener("click", (e) => {
   if (!t) return;
   e.preventDefault();
   const key = t.dataset.term;
-  const pop = el(`<div class="scrim light"><div class="glossary"><h4>${esc(key)}</h4><p>${esc(GLOSSARY[key]||"")}</p><button class="btn ghost" id="gx">Got it</button></div></div>`);
+  const pop = el(`<div class="scrim light"><div class="glossary" role="dialog" aria-modal="true" aria-labelledby="glossaryTitle"><h4 id="glossaryTitle">${esc(key)}</h4><p>${esc(GLOSSARY[key]||"")}</p><button class="btn ghost" id="gx">Got it</button></div></div>`);
   document.body.appendChild(pop);
-  const close=()=>pop.remove();
+  const close = manageDialog(pop, "#gx");
   pop.querySelector("#gx").onclick=close;
   pop.onclick=(ev)=>{ if(ev.target===pop) close(); };
 });
@@ -381,11 +504,19 @@ function route() {
   if (seg === "ask") return viewAdvisor();
   return viewToday();
 }
+let activeSection = "#/";
 function render() {
+  const hash = location.hash || "#/";
+  if (["#/", "#/waters", "#/ask", "#/log"].includes(hash)) activeSection = hash;
   app.innerHTML = "";
   app.appendChild(route());
   updateSyncPill();
-  document.querySelectorAll(".tab").forEach((t)=>t.classList.toggle("on", t.dataset.route === (location.hash||"#/")));
+  document.querySelectorAll(".tab").forEach((t) => {
+    const on = t.dataset.route === (hash.startsWith("#/water/") ? activeSection : hash);
+    t.classList.toggle("on", on);
+    if (on) t.setAttribute("aria-current", "page");
+    else t.removeAttribute("aria-current");
+  });
   app.scrollTop = 0; window.scrollTo(0,0);
 }
 window.addEventListener("hashchange", render);
