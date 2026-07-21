@@ -187,6 +187,16 @@ button { font-family: inherit; cursor: pointer; }
 .toast { position: fixed; bottom: calc(var(--tab-h) + 16px); left: 50%; transform: translateX(-50%) translateY(20px); background: var(--ink); color: #fff; padding: 10px 18px; border-radius: 999px; font-size: .88rem; opacity: 0; transition: all .3s ease; z-index: 60; }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
+/* Score explainer */
+.score-info-link { margin-top: 12px; background: rgba(255,255,255,.12); color: #eafcfb; border: none; padding: 7px 14px; border-radius: 999px; font-size: .82rem; font-weight: 600; }
+.score-info-link:active { background: rgba(255,255,255,.22); }
+.info-btn { background: transparent; border: 1px solid var(--line); color: var(--water); font-size: .74rem; font-weight: 600; padding: 3px 10px; border-radius: 999px; }
+.info-sheet p { margin: 0 0 4px; font-size: .93rem; }
+.info-list { margin: 4px 0 10px; padding-left: 18px; }
+.info-list li { margin: 6px 0; font-size: .9rem; }
+.info-list.sources li { font-family: "IBM Plex Mono", monospace; font-size: .8rem; }
+.info-list.sources a { color: var(--water); font-weight: 600; border-bottom: 1px dotted var(--water); }
+
 /* ---- Bottom tab bar ---- */
 .tabbar { position: fixed; bottom: 0; left: 0; right: 0; height: calc(var(--tab-h) + env(safe-area-inset-bottom)); padding-bottom: env(safe-area-inset-bottom); background: rgba(255,255,255,.92); backdrop-filter: blur(12px); border-top: 1px solid var(--line); display: flex; z-index: 40; }
 .tab { flex: 1; border: none; background: none; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: var(--ink-2); font-size: .68rem; font-weight: 600; padding-top: 8px; }
