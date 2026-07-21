@@ -83,6 +83,7 @@ function viewToday() {
       <h1 class="hero-title">Where to fish</h1>
       <p id="sync-pill" class="sync-pill">Checking…</p>
       <div class="reco"><span class="reco-slash"></span><p>${esc(text)}</p></div>
+      <button class="score-info-link" id="scoreInfo">How's this scored? ›</button>
     </header>
     <div class="filter-row">
       <button class="chip ${driveFilter===45?"on":""}" data-drive="45">Within 45 min</button>
@@ -96,6 +97,7 @@ function viewToday() {
     driveFilter = b.dataset.drive === "inf" ? Infinity : 45; render();
   });
   v.querySelector("#resync").onclick = () => sync(render);
+  v.querySelector("#scoreInfo").onclick = openScoreInfo;
   return v;
 }
 
@@ -178,7 +180,7 @@ function viewWater(id) {
       <div><h1>${esc(w.name)}</h1><p class="muted">${esc(w.tagline)} · ${driveStr(w.driveMin)} from Madras</p></div>
     </header>
     <p class="intro">${esc(w.intro)}</p>
-    <div class="panel"><div class="panel-head"><span>Why that score</span></div><ul class="reasons">${reasons}</ul></div>
+    <div class="panel"><div class="panel-head"><span>Why that score</span><button class="info-btn" id="scoreInfo2">How it works</button></div><ul class="reasons">${reasons}</ul></div>
     ${cond}
     <div class="panel"><div class="panel-head"><span>When it's good</span></div>
       <p><strong>${esc(w.season.best)}.</strong> ${esc(w.season.note)}</p></div>
@@ -194,6 +196,7 @@ function viewWater(id) {
   </section>`);
 
   v.querySelector("#logHere").onclick = () => openLogSheet(w);
+  v.querySelector("#scoreInfo2").onclick = openScoreInfo;
   return v;
 }
 function cell(label, val, sub) {
@@ -281,6 +284,34 @@ function renderRec(text, ranked) {
       <div class="card-body"><div class="card-top"><h3>${esc(r.water.name)}</h3><span class="drive">${driveStr(r.water.driveMin)}</span></div>
       <p class="card-cond">${esc(r.reasons[0]?.text||"")}</p></div><span class="chev">›</span></a>`).join("");
   return `<div class="reco inline"><span class="reco-slash"></span><p>${esc(text)}</p></div><div class="cards">${top3}</div>`;
+}
+
+// ===== Score explainer (modal) ==============================================
+function openScoreInfo() {
+  const sheet = el(`<div class="scrim">
+    <div class="sheet info-sheet">
+      <div class="sheet-head"><h3>How the score works</h3><button class="x" id="closeInfo">✕</button></div>
+      <p>Every water gets a <strong>bite score from 0 to 100</strong>. It's an estimate built from real data — a read on whether the <em>conditions</em> are right, not a live report that fish are actually being caught.</p>
+      <p class="lbl">What goes into it</p>
+      <ul class="info-list">
+        <li><strong>Season</strong> — the biggest piece. Each water has a month-by-month baseline drawn from ODFW reports and fishery guides. (An alpine lake scores near zero in winter when it's snowed in; a river peaks during its hatch.)</li>
+        <li><strong>River flow</strong> — for the river waters, live USGS gauge readings nudge the score up when flow sits in the ideal range, and down when it's running too high or too low.</li>
+        <li><strong>Water temperature</strong> — 50–62°F adds points (the active range for trout); above 68°F takes some away.</li>
+        <li><strong>Weather</strong> — strong wind pulls lake scores down, overcast skies lift trout scores, and storms knock it down.</li>
+      </ul>
+      <p>Open any water and check <strong>“Why that score”</strong> to see exactly which of these moved the number today.</p>
+      <p class="lbl">Sources</p>
+      <ul class="info-list sources">
+        <li>River flow &amp; temp — <a href="https://waterservices.usgs.gov" target="_blank" rel="noopener">USGS Water Services</a></li>
+        <li>Weather — <a href="https://open-meteo.com" target="_blank" rel="noopener">Open-Meteo</a></li>
+        <li>Seasonal baselines &amp; fishery info — <a href="${ODFW_CENTRAL}" target="_blank" rel="noopener">Oregon Dept. of Fish &amp; Wildlife</a></li>
+      </ul>
+      <p class="muted small">It's a planning aid, not a guarantee — conditions being good doesn't promise the fish agree.</p>
+    </div></div>`);
+  document.body.appendChild(sheet);
+  const close = () => sheet.remove();
+  sheet.querySelector("#closeInfo").onclick = close;
+  sheet.onclick = (e) => { if (e.target === sheet) close(); };
 }
 
 // ===== Log sheet (modal) ====================================================
