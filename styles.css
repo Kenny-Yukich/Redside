@@ -1,0 +1,195 @@
+/* Redside — Central Oregon fishing companion
+   Design language: a field instrument for high-desert water.
+   Palette drawn from the subject: teal river water, basalt slate, morning gold,
+   sage, and the crimson lateral stripe of the redside rainbow — the signature. */
+
+:root {
+  --paper: #eff2f1;
+  --paper-2: #e4e9e7;
+  --card: #ffffff;
+  --ink: #17232b;
+  --ink-2: #4a5a60;
+  --water: #1e6e6b;
+  --water-deep: #123b3d;
+  --redside: #c4442a;
+  --redside-soft: #e06a4f;
+  --sage: #8a9a7b;
+  --gold: #d9a441;
+  --line: #d3dbd8;
+  --radius: 16px;
+  --shadow: 0 1px 2px rgba(18,59,61,.06), 0 8px 24px rgba(18,59,61,.07);
+  --tab-h: 64px;
+  font-synthesis: none;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: "IBM Plex Sans", system-ui, sans-serif;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  padding-bottom: calc(var(--tab-h) + env(safe-area-inset-bottom));
+  overscroll-behavior-y: contain;
+}
+h1, h2, h3, h4 { font-family: "Archivo", system-ui, sans-serif; letter-spacing: -.01em; margin: 0; }
+a { color: inherit; text-decoration: none; }
+button { font-family: inherit; cursor: pointer; }
+.muted { color: var(--ink-2); }
+.small { font-size: .82rem; }
+
+#app { max-width: 560px; margin: 0 auto; }
+.view { padding: 18px 16px 28px; animation: fade .3s ease; }
+@keyframes fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .view { animation: none; } * { transition: none !important; } }
+
+/* ---- Hero / Today ---- */
+.hero {
+  background: linear-gradient(160deg, var(--water) 0%, var(--water-deep) 100%);
+  color: #eafcfb; border-radius: 22px; padding: 20px 20px 18px; position: relative; overflow: hidden;
+}
+.hero::after { /* the redside stripe — a diagonal crimson slash across the hero */
+  content: ""; position: absolute; right: -40px; top: -20px; width: 220px; height: 3px;
+  background: var(--redside); transform: rotate(38deg); box-shadow: 0 0 18px 2px rgba(196,68,42,.6);
+}
+.hero-eyebrow { font-family: "IBM Plex Mono", monospace; font-size: .72rem; letter-spacing: .08em; text-transform: uppercase; opacity: .8; }
+.hero-title { font-size: 2rem; margin: 2px 0 8px; font-weight: 700; }
+.sync-pill { display: inline-block; font-family: "IBM Plex Mono", monospace; font-size: .72rem; padding: 3px 9px; border-radius: 999px; background: rgba(255,255,255,.14); margin: 0; }
+.sync-pill.busy { background: rgba(217,164,65,.28); }
+.sync-pill.offline { background: rgba(196,68,42,.28); }
+
+.reco { display: flex; gap: 10px; margin-top: 14px; align-items: flex-start; }
+.reco.inline { color: var(--ink); margin: 4px 0 12px; }
+.reco p { margin: 0; font-size: 1rem; }
+.reco-slash { flex: 0 0 4px; align-self: stretch; background: var(--redside); border-radius: 2px; min-height: 38px; }
+
+.filter-row { display: flex; gap: 8px; margin: 16px 0 10px; flex-wrap: wrap; }
+.chip { border: 1px solid var(--line); background: var(--card); color: var(--ink); padding: 8px 14px; border-radius: 999px; font-size: .86rem; font-weight: 600; }
+.chip.on { background: var(--water); color: #fff; border-color: var(--water); }
+.chip.ghost { background: transparent; color: var(--water); border-color: var(--line); font-weight: 600; }
+
+/* ---- Cards ---- */
+.cards { display: flex; flex-direction: column; gap: 10px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
+.water-card { display: flex; align-items: center; gap: 14px; padding: 12px 14px; }
+.water-card:active { transform: scale(.99); }
+.card-body { flex: 1; min-width: 0; }
+.card-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.card-top h3 { font-size: 1.06rem; }
+.drive { font-family: "IBM Plex Mono", monospace; font-size: .74rem; color: var(--ink-2); white-space: nowrap; }
+.card-sub { margin: 2px 0 0; color: var(--ink-2); font-size: .9rem; }
+.card-cond { margin: 4px 0 0; font-family: "IBM Plex Mono", monospace; font-size: .76rem; color: var(--water); }
+.chev { color: var(--line); font-size: 1.6rem; line-height: 1; }
+
+/* ---- Bite dial ---- */
+.dial { flex: 0 0 auto; }
+.dial-track { fill: none; stroke: var(--paper-2); stroke-width: 6; }
+.dial-fill { fill: none; stroke-width: 6; stroke-linecap: round; transition: stroke-dashoffset 1s ease; }
+.dial-num { font-family: "Archivo", sans-serif; font-weight: 700; font-size: 1.15rem; fill: var(--ink); text-anchor: middle; dominant-baseline: middle; }
+.dial.hot .dial-fill { stroke: var(--redside); }
+.dial.fair .dial-fill { stroke: var(--gold); }
+.dial.slow .dial-fill { stroke: var(--sage); }
+
+/* ---- Page heads ---- */
+.page-head { margin-bottom: 14px; }
+.page-head h1 { font-size: 1.7rem; }
+.page-head .muted { margin: 4px 0 0; }
+.back { display: inline-block; color: var(--water); font-weight: 600; margin-bottom: 10px; }
+.sec { font-size: 1.15rem; margin: 22px 0 8px; }
+
+/* ---- Water detail ---- */
+.water-hero { display: flex; align-items: center; gap: 14px; margin-bottom: 12px; }
+.water-hero h1 { font-size: 1.5rem; }
+.intro { font-size: 1rem; color: var(--ink); margin: 0 0 14px; }
+.panel { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; margin: 10px 0; box-shadow: var(--shadow); }
+.panel.empty { color: var(--ink-2); }
+.panel-head { display: flex; justify-content: space-between; align-items: center; font-family: "Archivo", sans-serif; font-weight: 700; font-size: .95rem; margin-bottom: 8px; }
+.panel ul { margin: 6px 0 0; padding-left: 18px; }
+.panel li { margin: 4px 0; }
+.lbl { font-family: "IBM Plex Mono", monospace; font-size: .68rem; text-transform: uppercase; letter-spacing: .06em; color: var(--sage); margin: 10px 0 2px; }
+
+/* Instrument gauges */
+.gauges { display: grid; grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); gap: 8px; }
+.gauge { background: var(--paper); border-radius: 12px; padding: 10px 8px; text-align: center; border: 1px solid var(--line); }
+.gauge-val { display: block; font-family: "IBM Plex Mono", monospace; font-size: 1.15rem; font-weight: 600; color: var(--water-deep); }
+.gauge-lbl { display: block; font-size: .72rem; font-weight: 700; margin-top: 2px; }
+.gauge-sub { display: block; font-size: .64rem; color: var(--ink-2); }
+
+/* Reasons list (why the score) */
+.reasons { list-style: none; padding: 0; margin: 0; }
+.reasons li { position: relative; padding-left: 20px; margin: 6px 0; font-size: .92rem; }
+.reasons li::before { position: absolute; left: 0; top: 0; font-weight: 700; }
+.reasons li.good::before { content: "▲"; color: var(--water); font-size: .7rem; top: 3px; }
+.reasons li.bad::before { content: "▼"; color: var(--redside); font-size: .7rem; top: 3px; }
+.reasons li.neutral::before { content: "•"; color: var(--sage); }
+
+/* Species blocks */
+.species { background: var(--card); border: 1px solid var(--line); border-left: 3px solid var(--water); border-radius: 12px; padding: 12px 14px; margin: 10px 0; box-shadow: var(--shadow); }
+.species-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.species-head h4 { font-size: 1.05rem; }
+.species p { margin: 0; font-size: .93rem; }
+.tag { font-family: "IBM Plex Mono", monospace; font-size: .64rem; text-transform: uppercase; letter-spacing: .05em; padding: 2px 7px; border-radius: 999px; font-weight: 600; }
+.tag.signature { background: var(--redside); color: #fff; }
+.tag.primary { background: rgba(30,110,107,.14); color: var(--water-deep); }
+.tag.secondary { background: var(--paper-2); color: var(--ink-2); }
+.tag.beginner { background: rgba(217,164,65,.2); color: #8a6a1a; }
+
+/* Regs panel — deliberately alarming-adjacent without being loud */
+.regs { border-color: var(--redside); border-left: 4px solid var(--redside); }
+.regs .panel-head { color: var(--redside); }
+.regs-links { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+
+/* Glossary terms */
+.term { border: none; background: none; padding: 0; color: var(--water); font: inherit; font-weight: 600; border-bottom: 1px dotted var(--water); }
+.term-dot { font-size: .6em; vertical-align: super; margin-left: 1px; color: var(--sage); }
+
+/* Buttons */
+.btn { border: 1px solid var(--line); background: var(--card); color: var(--ink); padding: 10px 16px; border-radius: 12px; font-weight: 600; font-size: .92rem; }
+.btn.primary { background: var(--water); color: #fff; border-color: var(--water); }
+.btn.ghost { background: transparent; color: var(--water); }
+.btn.wide { width: 100%; margin: 14px 0 4px; padding: 14px; }
+
+/* Log */
+.stat-row { display: flex; gap: 8px; margin-bottom: 6px; }
+.stat { flex: 1; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 8px; text-align: center; box-shadow: var(--shadow); }
+.stat-num { display: block; font-family: "Archivo", sans-serif; font-weight: 700; font-size: 1.4rem; color: var(--water-deep); }
+.stat-lbl { font-size: .72rem; color: var(--ink-2); }
+.loglist { list-style: none; padding: 0; margin: 8px 0 0; }
+.loglist.big { display: flex; flex-direction: column; gap: 8px; }
+.log-row { position: relative; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 10px 34px 10px 12px; }
+.loglist:not(.big) .log-row { border: none; border-bottom: 1px solid var(--line); border-radius: 0; padding: 8px 30px 8px 0; }
+.log-row .del { position: absolute; right: 8px; top: 8px; border: none; background: none; color: var(--line); font-size: .9rem; }
+.log-row .del:active { color: var(--redside); }
+.empty { color: var(--ink-2); padding: 18px; text-align: center; border: 1px dashed var(--line); border-radius: 12px; list-style: none; }
+
+/* Ask / advisor */
+.ask-chips { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.ask-box { display: flex; flex-direction: column; gap: 8px; }
+.ask-box textarea, .sheet textarea, .sheet input, .sheet select { width: 100%; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; font: inherit; background: var(--card); color: var(--ink); }
+.answer { margin-top: 14px; }
+.ai-note { display: flex; gap: 10px; background: var(--water-deep); color: #eafcfb; border-radius: 14px; padding: 12px 14px; margin-bottom: 12px; }
+.ai-note p { margin: 0; }
+.ai-badge { font-family: "IBM Plex Mono", monospace; font-size: .6rem; background: var(--gold); color: var(--ink); padding: 2px 6px; border-radius: 6px; height: fit-content; font-weight: 700; }
+
+/* Modal sheet + glossary + toast */
+.scrim { position: fixed; inset: 0; background: rgba(18,35,43,.5); display: flex; align-items: flex-end; justify-content: center; z-index: 50; animation: fade .2s ease; }
+.scrim.light { align-items: center; padding: 20px; }
+.sheet { background: var(--paper); width: 100%; max-width: 560px; border-radius: 22px 22px 0 0; padding: 18px 16px calc(20px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 10px; max-height: 88vh; overflow-y: auto; }
+.sheet-head { display: flex; justify-content: space-between; align-items: center; }
+.sheet label { display: flex; flex-direction: column; gap: 4px; font-size: .8rem; font-weight: 600; color: var(--ink-2); }
+.sheet .row2 { display: flex; gap: 10px; }
+.sheet .row2 label { flex: 1; }
+.x { border: none; background: none; font-size: 1.1rem; color: var(--ink-2); }
+.glossary { background: var(--card); border-radius: 18px; padding: 18px; max-width: 380px; box-shadow: var(--shadow); }
+.glossary h4 { text-transform: capitalize; color: var(--water-deep); margin-bottom: 6px; }
+.glossary p { margin: 0 0 14px; }
+.toast { position: fixed; bottom: calc(var(--tab-h) + 16px); left: 50%; transform: translateX(-50%) translateY(20px); background: var(--ink); color: #fff; padding: 10px 18px; border-radius: 999px; font-size: .88rem; opacity: 0; transition: all .3s ease; z-index: 60; }
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ---- Bottom tab bar ---- */
+.tabbar { position: fixed; bottom: 0; left: 0; right: 0; height: calc(var(--tab-h) + env(safe-area-inset-bottom)); padding-bottom: env(safe-area-inset-bottom); background: rgba(255,255,255,.92); backdrop-filter: blur(12px); border-top: 1px solid var(--line); display: flex; z-index: 40; }
+.tab { flex: 1; border: none; background: none; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: var(--ink-2); font-size: .68rem; font-weight: 600; padding-top: 8px; }
+.tab svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 1.8; }
+.tab.on { color: var(--water); }
+.tab.on svg { stroke: var(--water); }

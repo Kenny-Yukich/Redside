@@ -1,0 +1,16 @@
+{
+  "name": "Redside — Central Oregon Fishing",
+  "short_name": "Redside",
+  "description": "Where to fish, what to fish for, and what to use — Central Oregon.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#eff2f1",
+  "theme_color": "#123b3d",
+  "icons": [
+    { "src": "./icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "./icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "./icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
