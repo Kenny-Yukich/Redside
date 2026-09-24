@@ -61,12 +61,16 @@ async function transaction(mode, operation) {
   return new Promise((resolve, reject) => {
     let tx;
     let value;
+    let failure;
     try {
       tx = db.transaction(STORE, mode);
       tx.oncomplete = () => resolve(value);
-      tx.onabort = () => reject(storageError(tx.error));
+      tx.onabort = () => reject(storageError(failure || tx.error));
       tx.onerror = () => { /* The transaction abort reports the final error. */ };
-      operation(tx.objectStore(STORE), (result) => { value = result; });
+      operation(tx.objectStore(STORE), (result) => { value = result; }, error => {
+        failure = error;
+        try { tx.abort(); } catch { reject(storageError(error)); }
+      });
     } catch (error) {
       if (tx) { try { tx.abort(); } catch { /* Already finished. */ } }
       reject(storageError(error));
@@ -94,14 +98,16 @@ export async function getPlan(id) {
 // Read/modify/write in one transaction, so a stale queue snapshot cannot bring a
 // deleted plan back. The updater must be synchronous; null means no change.
 export async function updatePlan(id, updater) {
-  return transaction("readwrite", (store, done) => {
+  return transaction("readwrite", (store, done, fail) => {
     const request = store.get(id);
     request.onsuccess = () => {
-      if (!request.result) { done(null); return; }
-      const next = updater(request.result);
-      if (!next) { done(null); return; }
-      store.put(next);
-      done(next);
+      try {
+        if (!request.result) { done(null); return; }
+        const next = updater(request.result);
+        if (!next) { done(null); return; }
+        store.put(next);
+        done(next);
+      } catch (error) { fail(error); }
     };
   });
 }

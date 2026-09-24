@@ -37,7 +37,7 @@ export function validateInput(input) {
   need(photoData.length % 4 === 0, "Invalid JPEG encoding.");
   try { gridCells(input.grid); } catch { throw new RequestError("Use a 6 by 4 or 4 by 6 photo grid."); }
   need(finite(input.lat, -85.0511, 85.0511) && finite(input.lon, -180, 180), "Choose a valid map position.");
-  need(finite(input.heading, 0, 359.999999), "Choose a facing direction from 0 to 359 degrees.");
+  need(finite(input.heading, 0, 360) && input.heading < 360, "Choose a facing direction from 0 to 359 degrees.");
   need(stringList(input.species, 1, 30, 120), "Choose at least one target species.");
   need(stringList(input.tackle, 0, 100, 300), "Invalid tackle list.");
   const context = input.context;
