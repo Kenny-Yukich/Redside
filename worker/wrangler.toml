@@ -1,0 +1,12 @@
+name = "redside-advisor"
+main = "index.js"
+compatibility_date = "2026-09-01"
+workers_dev = true
+
+[vars]
+# Browsers send the site's origin only: no /Redside path and no trailing slash.
+# Confirm this host matches your deployed GitHub Pages site before deploying.
+ALLOWED_ORIGIN = "https://kenny-yukich.github.io"
+
+# Set ANTHROPIC_API_KEY, MAPBOX_TOKEN, APP_PASSPHRASE with `wrangler secret put`.
+# Never add their values here.
