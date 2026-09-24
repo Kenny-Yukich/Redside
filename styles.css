@@ -23,6 +23,45 @@
   font-synthesis: none;
 }
 
+/* Fish This Spot — isolated styles for the photo workflow. */
+.spot-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.spot-head .scenic-kicker { color: var(--water); }
+.spot-head h1 { font-size: clamp(1.35rem, 5vw, 1.7rem); }
+.spot-head .btn { flex: 0 0 auto; }
+.spot-form label:not(.spot-check):not(.spot-file) { display: flex; flex-direction: column; gap: 5px; margin: 12px 0; font-size: .88rem; font-weight: 600; }
+.spot-form input:not([type=checkbox]):not([type=file]), .spot-form textarea, .spot-form select { width: 100%; min-height: 44px; border: 1px solid var(--line); border-radius: 10px; padding: 10px; font: inherit; font-size: 16px; color: var(--ink); background: var(--card); }
+.spot-form .row2 { display: flex; gap: 12px; }
+.spot-form .row2 > label { flex: 1; min-width: 0; }
+.spot-form h2, .spot-view .panel h2 { font-size: 1.12rem; margin-bottom: 8px; }
+.spot-view .panel h3 { font-size: .93rem; margin-top: 16px; }
+.spot-form fieldset { min-width: 0; margin: 16px 0; padding: 0; border: 0; }
+.spot-form legend { font-weight: 700; margin-bottom: 8px; }
+.spot-check { display: flex; align-items: center; gap: 10px; min-height: 44px; font-size: .9rem; cursor: pointer; }
+.spot-check input { width: 20px; height: 20px; flex: 0 0 auto; accent-color: var(--water); }
+.spot-file { position: relative; overflow: hidden; display: inline-flex; align-items: center; cursor: pointer; }
+.spot-file input { position: absolute; inset: 0; opacity: 0; width: 100%; cursor: pointer; }
+.spot-file:focus-within { outline: 3px solid var(--gold); outline-offset: 3px; }
+.spot-preview { display: block; width: 100%; height: auto; border-radius: 12px; }
+.spot-map { height: 290px; border-radius: 12px; background: var(--paper-2); isolation: isolate; z-index: 0; }
+.spot-pin { color: white; border: 3px solid white; background: var(--redside); border-radius: 50%; text-align: center; line-height: 26px; box-shadow: 0 2px 8px #0008; }
+.spot-arrow { display: grid; place-items: center; color: #f9d76c; background: #123b3de8; border: 2px solid #f9d76c; border-radius: 50%; font-size: 32px; box-shadow: 0 2px 8px #0008; }
+.spot-arrow span { display: block; line-height: 1; }
+.spot-photo { position: relative; }
+.spot-photo > img { display: block; width: 100%; height: auto; border-radius: 12px; }
+.spot-zone { position: absolute; transform: translate(-50%, -50%); border-radius: 50%; width: 44px; height: 44px; border: 3px solid white; background: var(--water-deep); color: white; font-size: 20px; font-weight: 700; box-shadow: 0 2px 8px #0008; }
+.spot-zone[aria-pressed=true] { background: var(--redside); outline: 3px solid var(--gold); outline-offset: 2px; }
+.spot-legend { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0; }
+.spot-legend .chip { font-size: .75rem; padding: 8px 10px; }
+.spot-reasons { padding-left: 18px; }
+.spot-reasons li { margin-bottom: 10px; }
+.spot-link { color: var(--water); text-decoration: underline; }
+.spot-saved { display: flex; flex-direction: column; gap: 5px; }
+.spot-saved > span { font-size: .82rem; }
+.spot-saved .tag { align-self: flex-start; }
+.spot-debug summary { min-height: 44px; cursor: pointer; font-weight: 600; }
+.spot-debug pre { font-size: .72rem; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 420px; overflow-y: auto; }
+.spot-view [data-spot-status]:not(:empty) { padding: 12px; border-left: 3px solid var(--water); background: var(--card); border-radius: 4px; }
+
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; }
 body {

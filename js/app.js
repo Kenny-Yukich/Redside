@@ -5,6 +5,9 @@ import { WATERS, WATER_BY_ID, GLOSSARY, ODFW_CENTRAL, ODFW_REGS } from "./data.j
 import { refreshAll, cachedFor, ageLabel, skyLabel } from "./conditions.js";
 import { rankWaters, scoreWater, recommend, askAI } from "./advisor.js";
 import { getCatches, addCatch, deleteCatch, catchesForWater, stats, exportJSON, importJSON } from "./log.js";
+import { viewSpot, disposeSpot } from "./spot.js";
+import { viewSpotSettings } from "./spot-settings.js";
+import { startSpotQueue } from "./spot-queue.js";
 
 const app = document.getElementById("app");
 const el = (html) => { const t = document.createElement("template"); t.innerHTML = html.trim(); return t.content.firstElementChild; };
@@ -212,7 +215,7 @@ function viewToday() {
   v.querySelectorAll("[data-drive]").forEach((b) => b.onclick = () => {
     driveFilter = b.dataset.drive === "inf" ? Infinity : 45; render();
   });
-  v.querySelector("#resync").onclick = () => sync(render);
+  v.querySelector("#resync").onclick = () => sync(renderAfterSync);
   v.querySelector("#scoreInfo").onclick = openScoreInfo;
   return v;
 }
@@ -328,12 +331,13 @@ function cell(label, val, sub) {
 
 // ===== CATCH LOG ============================================================
 function logRow(c) {
-  return `<li class="log-row" data-id="${c.id}">
+  return `<li class="log-row" data-id="${esc(c.id)}">
     <div><strong>${esc(c.species||"Fish")}</strong> ${c.length?`· ${esc(c.length)}`:""}
       <span class="muted small">${esc(c.date)}${c.waterName?` · ${esc(c.waterName)}`:""}</span></div>
-    ${c.method?`<div class="muted small">Worked: ${esc(c.method)}</div>`:""}
+    ${c.method?`<div class="muted small">${c.planId ? "Tied on" : "Worked"}: ${esc(c.method)}</div>`:""}
+    ${c.planId ? `<div class="small"><a class="spot-link" href="#/spot/${encodeURIComponent(c.planId)}">Fish This Spot · Zone ${esc(c.zone)}</a> · ${esc({ fish: "Fish", bites: "Bites", nothing: "Nothing" }[c.result] || c.result)}</div>` : ""}
     ${c.notes?`<div class="small">${esc(c.notes)}</div>`:""}
-    <button class="del" data-del="${c.id}" aria-label="Delete">✕</button>
+    <button class="del" data-del="${esc(c.id)}" aria-label="Delete">✕</button>
   </li>`;
 }
 function viewLog() {
@@ -502,17 +506,20 @@ function route() {
   if (seg === "waters") return viewWaters();
   if (seg === "log") return viewLog();
   if (seg === "ask") return viewAdvisor();
+  if (seg === "spot") return viewSpot(arg);
+  if (seg === "settings") return viewSpotSettings();
   return viewToday();
 }
 let activeSection = "#/";
 function render() {
   const hash = location.hash || "#/";
   if (["#/", "#/waters", "#/ask", "#/log"].includes(hash)) activeSection = hash;
+  disposeSpot();
   app.innerHTML = "";
   app.appendChild(route());
   updateSyncPill();
   document.querySelectorAll(".tab").forEach((t) => {
-    const on = t.dataset.route === (hash.startsWith("#/water/") ? activeSection : hash);
+    const on = t.dataset.route === (hash.startsWith("#/water/") ? activeSection : hash.startsWith("#/spot") || hash === "#/settings" ? "#/spot" : hash);
     t.classList.toggle("on", on);
     if (on) t.setAttribute("aria-current", "page");
     else t.removeAttribute("aria-current");
@@ -520,12 +527,18 @@ function render() {
   app.scrollTop = 0; window.scrollTo(0,0);
 }
 window.addEventListener("hashchange", render);
-window.addEventListener("online", () => sync(render));
+// Background condition updates must not replace an active photo or settings form.
+function renderAfterSync() {
+  if (location.hash.startsWith("#/spot") || location.hash === "#/settings") { updateSyncPill(); return; }
+  render();
+}
+window.addEventListener("online", () => sync(renderAfterSync));
 window.addEventListener("offline", updateSyncPill);
 
 // First paint immediately from cache; then sync in the background.
 render();
-sync(render);
+sync(renderAfterSync);
+startSpotQueue();
 
 // Register service worker for offline/installability.
 if ("serviceWorker" in navigator) {

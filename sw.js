@@ -2,7 +2,7 @@
 // let live-data requests (USGS, Open-Meteo) go to the network and fail gracefully
 // (the app falls back to its own localStorage cache).
 
-const CACHE = "redside-v4";
+const CACHE = "redside-v5";
 const SHELL = [
   "./",
   "./index.html",
@@ -13,6 +13,14 @@ const SHELL = [
   "./js/conditions.js",
   "./js/advisor.js",
   "./js/log.js",
+  "./js/spot.js",
+  "./js/spot-settings.js",
+  "./js/spot-context.js",
+  "./js/spot-map.js",
+  "./js/spot-queue.js",
+  "./js/spot-store.js",
+  "./js/spot-media.js",
+  "./js/spot-contract.js",
   "./assets/river-cast.jpg",
   "./assets/river-overlook.jpg",
   "./assets/riverside-angler.jpg",
@@ -33,7 +41,12 @@ self.addEventListener("activate", (e) => {
 });
 
 self.addEventListener("fetch", (e) => {
+  // Worker POSTs (including analysis and advisor) never enter Cache Storage.
+  if (e.request.method !== "GET") return;
   const url = new URL(e.request.url);
+  const leaflet = url.origin === "https://cdnjs.cloudflare.com" && /^\/ajax\/libs\/leaflet\/1\.9\.4\/leaflet\.(js|css)$/.test(url.pathname);
+  // Leave Worker traffic and map tiles entirely to the browser/network.
+  if (url.origin !== location.origin && !/^(fonts\.googleapis\.com|fonts\.gstatic\.com)$/.test(url.host) && !leaflet) return;
   // Never cache live APIs — always try network, and don't error out offline.
   if (/waterservices\.usgs\.gov|api\.open-meteo\.com|\/api\//.test(url.href)) {
     e.respondWith(fetch(e.request).catch(() => new Response("{}", { headers: { "Content-Type": "application/json" } })));
@@ -44,11 +57,11 @@ self.addEventListener("fetch", (e) => {
     caches.match(e.request).then((hit) =>
       hit || fetch(e.request).then((res) => {
         const copy = res.clone();
-        if (res.ok && (url.origin === location.origin || /fonts\.(googleapis|gstatic)\.com/.test(url.host))) {
-          caches.open(CACHE).then((c) => c.put(e.request, copy));
+        if (res.ok && (url.origin === location.origin || /fonts\.(googleapis|gstatic)\.com/.test(url.host) || leaflet)) {
+          caches.open(CACHE).then((c) => c.put(e.request, copy)).catch(() => {});
         }
         return res;
-      }).catch(() => hit)
+      }).catch(() => hit || Response.error())
     )
   );
 });

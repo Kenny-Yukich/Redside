@@ -28,6 +28,7 @@ export function addCatch(entry) {
     // snapshot of conditions at the time, if we have them — this is what makes
     // the log valuable later ("you caught fish here when flow was X").
     conditions: entry.conditions || null,
+    ...(entry.planId ? { planId: entry.planId, zone: entry.zone, result: entry.result } : {}),
   };
   list.unshift(rec);
   save(list);
@@ -44,7 +45,7 @@ export function catchesForWater(waterId) {
 
 // Simple stats to hand back to the angler over time.
 export function stats() {
-  const list = getCatches();
+  const list = getCatches().filter(c => !c.result || c.result === "fish");
   const byWater = {};
   const bySpecies = {};
   for (const c of list) {

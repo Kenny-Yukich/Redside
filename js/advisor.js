@@ -7,10 +7,11 @@
 //
 // An optional AI layer (askAI) can answer free-form questions by calling a small
 // serverless endpoint you deploy. If that endpoint isn't set up, the app just
-// uses the rules engine. See functions/advisor.js and the README.
+// uses the rules engine. See worker/README.md for the separate Worker deployment.
 
 import { WATERS } from "./data.js";
 import { cachedFor } from "./conditions.js";
+import { getSpotSettings } from "./spot-settings.js";
 
 // Clamp helper
 const clamp = (n, lo = 0, hi = 100) => Math.max(lo, Math.min(hi, n));
@@ -104,9 +105,10 @@ export function recommend(date = new Date(), maxDriveMin = Infinity) {
 // ---- Optional AI layer -------------------------------------------------------
 // Posts the current conditions + the water knowledge base to your serverless
 // endpoint (which holds the Anthropic key). Falls back gracefully if unset.
-const AI_ENDPOINT = "/api/advisor"; // change if you deploy elsewhere
 
 export async function askAI(question, date = new Date()) {
+  const settings = getSpotSettings();
+  if (!settings.workerUrl || !settings.passphrase || !navigator.onLine) throw new Error("AI advisor is not configured or is offline");
   const ranked = rankWaters(date);
   const context = ranked.map((r) => ({
     name: r.water.name,
@@ -116,9 +118,10 @@ export async function askAI(question, date = new Date()) {
     species: r.water.species.map((s) => ({ name: s.name, when: s.when })),
     conditions: cachedFor(r.water.id),
   }));
-  const res = await fetch(AI_ENDPOINT, {
+  const res = await fetch(`${settings.workerUrl}/api/advisor`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "x-app-passphrase": settings.passphrase },
+    cache: "no-store", credentials: "omit",
     body: JSON.stringify({ question, date: date.toISOString(), context }),
   });
   if (!res.ok) throw new Error(`advisor endpoint ${res.status}`);
