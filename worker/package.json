@@ -1,0 +1,11 @@
+{
+  "name": "redside-worker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test *.test.mjs"
+  },
+  "dependencies": {
+    "@higgsfield/client": "0.2.6"
+  }
+}

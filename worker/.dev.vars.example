@@ -1,0 +1,7 @@
+# Local Wrangler development only. Copy to .dev.vars and replace placeholders.
+# Never commit .dev.vars or real credentials.
+ANTHROPIC_API_KEY=""
+MAPBOX_TOKEN=""
+APP_PASSPHRASE=""
+# Official Higgsfield JavaScript SDK credential: key ID, colon, key secret.
+HF_CREDENTIALS="YOUR_KEY_ID:YOUR_KEY_SECRET"
