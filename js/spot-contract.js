@@ -80,10 +80,10 @@ export function resultSchema(grid, includeAngler = false) {
     title: { type: "string", enum: ZONE_TITLES },
     tackle: string(300),
     fromMyTackle: { type: "boolean", description: "True only when tackle exactly matches one item from the supplied tackle list." },
-    aim: string(),
-    technique: string(),
-    reasons: { type: "array", minItems: 1, maxItems: 6, items: record({
-      source: { type: "string", enum: includeAngler ? SOURCES : SOURCES.filter(source => source !== "angler") }, text: string(),
+    aim: { ...string(160), description: "One direct sentence, at most 12 words, naming a visible casting target." },
+    technique: { ...string(220), description: "One direct sentence, at most 18 words, explaining how to fish the lure." },
+    reasons: { type: "array", minItems: 1, maxItems: 1, items: record({
+      source: { type: "string", enum: includeAngler ? SOURCES : SOURCES.filter(source => source !== "angler") }, text: { ...string(140), description: "One reason, at most 10 words; qualify guesses." },
     }) },
   });
   return {
@@ -94,8 +94,9 @@ export function resultSchema(grid, includeAngler = false) {
     properties: {
       kind: { type: "string", enum: ["plan", "question"], description: "For plan include only kind, zones, fallback, visible, guesses. For question include only kind, question, options." },
       zones: { type: "array", minItems: 3, maxItems: 3, items: zone },
-      fallback: string(2400), visible: list(1, 10), guesses: list(1, 10),
-      question: string(700), options: list(2, 5, 180),
+      fallback: { ...string(300), description: "One change to try and when; at most 25 words total." },
+      visible: list(1, 2, 120), guesses: list(1, 2, 200),
+      question: { ...string(180), description: "One short clarification, at most 15 words." }, options: list(2, 5, 60),
     },
     required: ["kind"],
     additionalProperties: false,
