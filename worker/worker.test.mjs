@@ -50,6 +50,34 @@ test("validates full Redside water data and unknown-water requests", () => {
   assert.equal(validateInput(unknown), unknown);
 });
 
+test("photo observations reach the AI with independent time, temperature and evidence instructions", async () => {
+  const body = input();
+  body.observations = { location: "Deschutes, upstream of Steelhead Falls", notes: "Fishing from shore. No bites on a spinner.", photoDate: "2026-09-20", photoTime: "08:00", facing: "upstream", airTempF: 48, waterTempF: 55 };
+  const result = plan(); result.zones[0].reasons = [{ source: "angler", text: "You reported an upstream view at 8 am." }];
+  const response = await handleRequest(request(body), env, upstream(result, (url, options) => {
+    if (!url.includes("anthropic.com")) return;
+    const payload = JSON.parse(options.body);
+    const sent = JSON.parse(payload.messages[0].content.at(-1).text.split("\n").slice(1).join("\n"));
+    assert.deepEqual(sent.observations, body.observations);
+    assert.equal(sent.context.date, body.context.date);
+    assert.match(payload.system, /not the upload time/);
+    assert.match(payload.system, /never infer one from the other/);
+    assert.match(payload.system, /ask a clarification/);
+    assert.match(payload.system, /Never place a target center on dry bank/);
+    assert.ok(payload.tools[0].input_schema.properties.zones.items.properties.reasons.items.properties.source.enum.includes("angler"));
+  }));
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), result);
+  assert.ok(!resultSchema(landscape).properties.zones.items.properties.reasons.items.properties.source.enum.includes("angler"), "Old clients keep the existing evidence sources");
+});
+
+test("malformed observations are rejected before any provider calls", async () => {
+  for (const observations of [null, { notes: "a".repeat(1601) }, { photoDate: "2026-02-30" }, { photoTime: "25:00" }, { facing: "sideways" }, { waterTempF: 200 }, { apiKey: "unwanted" }]) {
+    const response = await handleRequest(request({ ...input(), observations }), env, neverFetch);
+    assert.equal(response.status, 400);
+  }
+});
+
 test("rejects unusable coordinates, headings, context, and malformed photos before API calls", async () => {
   for (const mutate of [
     value => { value.lat = "44.49"; }, value => { value.lat = 90; }, value => { value.lon = -181; },
@@ -141,6 +169,11 @@ test("sends both images, authoritative instructions, requested model and forced 
     assert.equal(body.model, MODEL); assert.equal(MODEL, "claude-sonnet-5");
     assert.equal(body.tool_choice.type, "tool"); assert.equal(body.tool_choice.name, body.tools[0].name);
     assert.deepEqual(body.thinking, { type: "disabled" });
+    const schema = body.tools[0].input_schema;
+    assert.equal(schema.type, "object");
+    for (const unsupported of ["oneOf", "anyOf", "allOf"]) assert.ok(!(unsupported in schema), `Anthropic rejects root ${unsupported}`);
+    assert.deepEqual(schema.properties.kind.enum, ["plan", "question"]);
+    assert.ok(schema.properties.zones && schema.properties.question && schema.properties.options);
     const images = body.messages[0].content.filter(block => block.type === "image");
     assert.equal(images.length, 2);
     assert.equal(images[0].source.data, "/9j/2Q==");
@@ -172,7 +205,7 @@ test("clarification responses have no zones, and answers reach the next analysis
 test("portrait grids allow A-D / 1-6 and landscape grids A-F / 1-4", () => {
   assert.equal(gridCells(landscape).length, 24); assert.equal(gridCells(portrait).length, 24);
   assert.ok(gridCells(portrait).includes("D6")); assert.ok(!gridCells(portrait).includes("F2"));
-  assert.ok(resultSchema(landscape).oneOf[0].properties.zones.items.properties.cell.enum.includes("F4"));
+  assert.ok(resultSchema(landscape).properties.zones.items.properties.cell.enum.includes("F4"));
   const result = plan(); result.zones[0].cell = "D6";
   assert.equal(validateResult(result, portrait, input().tackle), result);
   assert.throws(() => validateResult(result, landscape, input().tackle));
@@ -211,6 +244,83 @@ test("upstream errors, secrets and raw payloads are never exposed", async () => 
     const message = await response.text();
     assert.ok(!message.includes("SECRET")); assert.ok(!message.includes(env.MAPBOX_TOKEN)); assert.ok(!message.includes(env.ANTHROPIC_API_KEY));
   }
+});
+
+test("AI bad requests distinguish insufficient credit and request configuration without exposing provider text", async () => {
+  for (const [reason, expected] of [
+    ["Your credit balance is too low to access the Anthropic API. SECRET", /API credit balance is too low/],
+    ["tool_choice is incompatible with thinking. SECRET", /configuration needs a code fix/],
+    ["Unrecognized problem SECRET", /AI provider rejected the request/],
+  ]) {
+    const response = await handleRequest(request(), env, async url => url.includes("mapbox.com")
+      ? new Response("image", { headers: { "content-type": "image/jpeg" } })
+      : Response.json({ error: { message: reason } }, { status: 400 }));
+    const body = await response.json();
+    assert.equal(response.status, 502);
+    assert.match(body.error, expected);
+    assert.ok(!body.error.includes("SECRET"));
+  }
+});
+
+test("400 diagnostics redact secrets and opaque payloads but retain the provider request ID", async () => {
+  const response = await handleRequest(request(), env, async url => url.includes("mapbox.com")
+    ? new Response("image", { headers: { "content-type": "image/jpeg" } })
+    : Response.json({ error: { type: "invalid_request_error", message:
+      `Unsupported model. ${env.ANTHROPIC_API_KEY} ${env.MAPBOX_TOKEN} ${env.APP_PASSPHRASE} https://private.test/token sk-ant-testsecret ${"A".repeat(80)} "private request content"` } },
+      { status: 400, headers: { "request-id": "req_12345678" } }));
+  const body = await response.json();
+  assert.match(body.error, /HTTP 400/);
+  assert.match(body.error, /Unsupported model/);
+  assert.match(body.error, /req_12345678/);
+  for (const secret of [env.ANTHROPIC_API_KEY, env.MAPBOX_TOKEN, env.APP_PASSPHRASE, "private.test", "sk-ant-testsecret", "A".repeat(80), "private request content"]) assert.ok(!body.error.includes(secret));
+  assert.ok(body.error.length < 500);
+  assert.ok(!/[{}<>]/.test(body.error));
+});
+
+test("API spend limits are explained separately from credit balance", async () => {
+  const response = await handleRequest(request(), env, async url => url.includes("mapbox.com")
+    ? new Response("image", { headers: { "content-type": "image/jpeg" } })
+    : Response.json({ error: { type: "invalid_request_error", message: "Your organization has reached its monthly spend limit" } }, { status: 400 }));
+  assert.match((await response.json()).error, /spending limits even if the account still has credit/);
+});
+
+test("workspace selection is sent only to Anthropic on both analysis and Ask", async () => {
+  const workspace = "wrkspc_01JwQvzr7rXLA5AGx3HKfFUJ";
+  const scopedEnv = { ...env, ANTHROPIC_WORKSPACE_ID: ` ${workspace} ` };
+  const response = await handleRequest(request(), scopedEnv, upstream(plan(), (url, options) => {
+    if (url.includes("mapbox.com")) {
+      assert.ok(!url.includes(workspace));
+      assert.equal(options.headers?.["anthropic-workspace-id"], undefined);
+    } else assert.equal(options.headers["anthropic-workspace-id"], workspace);
+  }));
+  assert.equal(response.status, 200);
+  const req = new Request("https://worker.test/api/advisor", request({ question: "Where today?", date: input().context.date, context: [] }));
+  const answer = await handleRequest(req, scopedEnv, async (url, options) => {
+    assert.equal(url, "https://api.anthropic.com/v1/messages");
+    assert.equal(options.headers["anthropic-workspace-id"], workspace);
+    return Response.json({ content: [{ type: "text", text: "Try Haystack." }] });
+  });
+  assert.equal(answer.status, 200);
+});
+
+test("workspace-scoped keys omit optional workspace headers and invalid configuration makes no upstream calls", async () => {
+  const response = await handleRequest(request(), env, upstream(plan(), (url, options) => {
+    assert.equal(options.headers?.["anthropic-workspace-id"], undefined);
+  }));
+  assert.equal(response.status, 200);
+  for (const workspace of ["Default", "sk-ant-api-key", "wrkspc_12345678\r\ninjected: value", 123]) {
+    const response = await handleRequest(request(), { ...env, ANTHROPIC_WORKSPACE_ID: workspace }, neverFetch);
+    assert.equal(response.status, 503);
+    assert.match((await response.json()).error, /invalid ANTHROPIC_WORKSPACE_ID/);
+  }
+});
+
+test("unscoped API keys receive actionable workspace setup instructions", async () => {
+  const response = await handleRequest(request(), env, async url => url.includes("mapbox.com")
+    ? new Response("image", { headers: { "content-type": "image/jpeg" } })
+    : Response.json({ error: { type: "invalid_request_error", message: "This API key is not scoped to a workspace, so this request must include the anthropic-workspace-id header." } }, { status: 400 }));
+  assert.equal(response.status, 503);
+  assert.match((await response.json()).error, /Set ANTHROPIC_WORKSPACE_ID/);
 });
 
 test("existing Ask endpoint keeps its answer shape and authentication", async () => {

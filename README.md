@@ -28,8 +28,12 @@ Same idea as Cadence: no App Store, no download. You open it in Safari and tap
   new phone.
 - **Fish This Spot** — take or choose a photo, confirm its position and facing
   on satellite imagery, then get three targets drawn on the clean photo. Pick
-  species and your saved tackle, answer any clarification, and inspect the
-  labeled grid and raw JSON in Debug. Plans and photos are stored in IndexedDB
+  species and your saved tackle, and add optional spot details: water/landmark,
+  description, photo date and local time, upstream/downstream/across facing,
+  and separate air/water temperatures in Fahrenheit. The AI distinguishes your
+  observations from photo evidence and current cached conditions. Saved plans
+  have **Add or edit details** to request a new analysis of the same photo while
+  keeping the original plan. Plans and photos are stored in IndexedDB
   for offline use. **Tried it** records fish, bites, or nothing in the catch log.
 - **Settings** — open from Fish This Spot to save your Worker URL, app passphrase,
   public Mapbox token, and **My Tackle** list on this device.

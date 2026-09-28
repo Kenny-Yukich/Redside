@@ -2,7 +2,7 @@
 // let live-data requests (USGS, Open-Meteo) go to the network and fail gracefully
 // (the app falls back to its own localStorage cache).
 
-const CACHE = "redside-v7";
+const CACHE = "redside-v8";
 const SHELL = [
   "./",
   "./index.html",
@@ -21,6 +21,7 @@ const SHELL = [
   "./js/spot-store.js",
   "./js/spot-media.js",
   "./js/spot-contract.js",
+  "./js/spot-observations.js",
   "./assets/river-cast.jpg",
   "./assets/river-overlook.jpg",
   "./assets/riverside-angler.jpg",

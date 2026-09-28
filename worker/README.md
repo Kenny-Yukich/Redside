@@ -18,6 +18,7 @@ npx wrangler secret put APP_PASSPHRASE
 The first deploy creates the Worker. It returns a configuration error until all secrets are set. Each `secret put` updates the deployed Worker. Copy the resulting `https://redside-advisor.<your-subdomain>.workers.dev` URL into Redside Settings, with no `/analyze` suffix.
 
 - `ANTHROPIC_API_KEY`: an Anthropic API key with access to `claude-sonnet-5`. The model constant stays exactly `claude-sonnet-5`.
+- `ANTHROPIC_WORKSPACE_ID`: needed only when the API key is not scoped to a single workspace. Copy the `wrkspc_` ID from Claude Console **Settings → Workspaces**, then run `npx.cmd wrangler secret put ANTHROPIC_WORKSPACE_ID` and enter the ID at the prompt. The Worker sends it in the `anthropic-workspace-id` header on both photo analysis and Ask requests, never to Mapbox. Existing workspace-scoped keys can leave it unset. See [Anthropic workspace selection](https://platform.claude.com/docs/en/manage-claude/authentication#select-a-workspace).
 - `MAPBOX_TOKEN`: a separate server-side Mapbox access token with the `styles:tiles` scope. Do not add browser URL restrictions to this token: the Worker has no browser Referer. It is kept in a Worker secret, never returned to the client or sent to Claude.
 - `APP_PASSPHRASE`: a strong unique passphrase. Enter the same value once in Redside Settings on each device. The client stores it on that device and sends it in `x-app-passphrase`; it is not included in saved plans, logs, or exports.
 
@@ -44,6 +45,14 @@ Create a second, public `pk.` Mapbox token for the client map, with `styles:tile
   heading: 90,                      // degrees clockwise from north, 0 <= heading < 360
   species: ["Rainbow trout"],
   tackle: ["Size 2 spinner"],
+  observations: {                   // optional; all fields optional, old requests still work
+    location: "Deschutes River, upstream of Steelhead Falls", // up to 200 characters
+    notes: "Clear water, light wind, no bites on a spinner yet.", // up to 1600 characters
+    photoDate: "2026-09-24",         // actual photo date, not upload date
+    photoTime: "08:00",              // local wall-clock time at the fishing spot
+    facing: "upstream",              // upstream, downstream, across, or unsure
+    airTempF: 48, waterTempF: 55      // separate reports, omit when unknown
+  },
   context: {
     water: {},                      // full nearest WATERS entry, or "unknown water"
     distanceMeters: 150,             // null when unavailable; known water must be <= 2000
@@ -69,7 +78,7 @@ A forced `return_spot_analysis` tool defines the JSON schema. Server and client 
       aim: "Cast beside the visible rock.",
       technique: "Retrieve slowly with short pauses.",
       reasons: [{ source: "photo", text: "A rock is visible near the bank." }]
-      // source: "photo", "overhead", or "Redside data"
+      // source: "photo", "overhead", "Redside data", or "angler" when observations are supplied
     }
   ],
   fallback: "After ten casts, change retrieve speed.",
@@ -88,7 +97,7 @@ The prompt treats old overhead imagery, changing reservoir shorelines, unknown d
 
 Sonnet 5 supports the [forced tool choice](https://platform.claude.com/docs/en/agents-and-tools/tool-use/overview) used here. Thinking is explicitly disabled to preserve the response budget because [Sonnet 5 enables adaptive thinking by default](https://platform.claude.com/docs/en/models/sonnet-5/whats-new-sonnet-5). The tool schema is non-strict JSON Schema with local validation, including constraints such as exact array sizes that strict tool mode does not support. Invalid or truncated output becomes a retryable error, never a partially rendered plan.
 
-Errors are JSON `{ error: "..." }` with an HTTP error status. Request bodies are capped at 8 MiB, context and lists are bounded, and upstream error bodies are never returned or logged. All Worker responses use `Cache-Control: no-store`. The service worker ignores POST requests. There is no Worker database and no Worker photo cache; saved and queued plans live in the client's IndexedDB.
+Errors are JSON `{ error: "..." }` with an HTTP error status. Request bodies are capped at 8 MiB, context and lists are bounded, and raw upstream error bodies are never returned or logged. Unclassified Anthropic 400 errors include a bounded, redacted provider message and validated request ID for diagnosis. Configured secrets, submitted message strings, quoted values, URLs, and opaque tokens are removed from that message. Spending-limit errors are distinguished from insufficient credit. All Worker responses use `Cache-Control: no-store`. The service worker ignores POST requests. There is no Worker database and no Worker photo cache; saved and queued plans live in the client's IndexedDB.
 
 ## Verification
 
@@ -105,7 +114,7 @@ The no-isolation flag lets these dependency-free tests also run in sandboxes tha
 An actual end-to-end result requires deployed secrets, model access, and a real photo. On iPhone Safari, open the Pages app, use **Share → Add to Home Screen**, configure the Worker URL, public Mapbox token and passphrase, then:
 
 1. Take a landscape photo at a known spot. Confirm GPS, drag the pin, allow the compass when prompted, and drag the facing arrow to verify the override.
-2. Analyze with saved tackle and a species. Inspect the debug grid and raw JSON, tap all three zones, and verify the separate fallback and uncertainty sections.
+2. Analyze with saved tackle, a species, and optional spot observations. Tap all three zones and verify the separate fallback and uncertainty sections. Confirm reported time and temperatures are not represented as visually verified evidence. Use Add or edit details on a saved plan and check that a new analysis preserves the original plan and photo.
 3. Repeat with a portrait library photo. Set its location manually. If a clarification appears, tap an answer and confirm it produces a plan or a new useful question.
 4. Save a plan, relaunch in airplane mode, and reopen it. Queue a new analysis while offline; reconnect with Redside open and confirm it runs. iOS may suspend closed PWAs: queued work resumes when the app is opened or brought to the foreground, not reliably while closed.
 5. Share a PNG with location off, then explicitly enable the location toggle and share again. Log **Tried it**, export JSON, and confirm the plan link and outcome survive import.

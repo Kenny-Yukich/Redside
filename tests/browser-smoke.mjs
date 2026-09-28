@@ -583,6 +583,69 @@ try {
     assert.equal(await page.locator("[data-map-error]").isVisible(), true);
   });
 
+  const observations = { location: "Deschutes River, upstream of Steelhead Falls", notes: "Fishing from the bank. Clear water. <b>No bites</b> on a spinner.", photoDate: "2026-09-27", photoTime: "08:00", facing: "upstream", airTempF: 48, waterTempF: 55 };
+  async function fillObservations(form) {
+    for (const name of ["location", "notes", "photoDate", "photoTime"]) await form.locator(`[data-observation=${name}]`).fill(observations[name]);
+    await form.locator("[data-observation=facing]").selectOption(observations.facing);
+    await form.locator(".spot-conditions summary").click();
+    for (const name of ["airTempF", "waterTempF"]) await form.locator(`[data-observation=${name}]`).fill(String(observations[name]));
+  }
+  await run("optional spot details survive route changes and are saved with an offline photo", async () => {
+    await page.goto(appURL + "#/spot");
+    await fillSpot();
+    await fillObservations(page.locator("[data-spot-form]"));
+    await page.goto(appURL + "#/settings");
+    await page.goto(appURL + "#/spot");
+    assert.equal(await page.locator("[data-observation=location]").inputValue(), observations.location);
+    assert.equal(await page.locator("[data-observation=photoTime]").inputValue(), "08:00");
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+    await page.screenshot({path: resolve(root, "test-results/spot-description-mobile.png"), fullPage: true, animations: "disabled"});
+    const before = workerCalls.length;
+    await context.setOffline(true);
+    await page.locator("[data-analyze]").click();
+    await page.locator("[data-retry]").waitFor();
+    const id = new URL(page.url()).hash.split("/").at(-1);
+    const saved = await page.evaluate(async id => (await (await import("./js/spot-store.js")).getPlan(id)).inputs.observations, id);
+    assert.deepEqual(saved, observations);
+    assert.equal(workerCalls.length, before);
+    assert.ok((await page.locator("[data-spot-details]").innerText()).includes("08:00"));
+    assert.equal(await page.locator("[data-spot-details] b").count(), 0, "Notes are displayed as text");
+    await context.setOffline(false);
+    await page.evaluate(async () => (await import("./js/spot-queue.js")).processSpotQueue());
+    await page.locator("[data-zone='1']").waitFor();
+    assert.deepEqual(workerCalls.at(-1).inputs.observations, observations);
+    await page.reload();
+    await page.locator("[data-zone='1']").waitFor();
+    assert.ok((await page.locator("[data-spot-details]").innerText()).includes(observations.location));
+  });
+
+  await run("adding details to a saved photo makes one new analysis and preserves the original", async () => {
+    await page.goto(appURL + "#/spot/" + firstPlanId);
+    await page.locator("[data-zone='1']").waitFor();
+    const before = workerCalls.length;
+    await page.locator("[data-edit-observations]").click();
+    const form = page.locator("[data-observations-form]");
+    await fillObservations(form);
+    assert.equal(workerCalls.length, before, "Editing alone never submits an analysis");
+    await form.getByRole("button", {name: "Analyze with these details"}).click();
+    await page.waitForFunction(id => location.hash !== "#/spot/" + id, firstPlanId);
+    await page.locator("[data-zone='1']").waitFor();
+    assert.equal(workerCalls.length, before + 1);
+    assert.deepEqual(workerCalls.at(-1).inputs.observations, observations);
+    assert.deepEqual(workerCalls.at(-1).inputs.answers, []);
+    const stored = await page.evaluate(async id => {
+      const store = await import("./js/spot-store.js");
+      const original = await store.getPlan(id);
+      const next = await store.getPlan(location.hash.split("/").at(-1));
+      return { originalStatus: original.status, originalObservations: original.inputs.observations, originalResult: original.result, basedOn: next.basedOnPlanId, newPhotoSize: next.photo.size, oldPhotoSize: original.photo.size };
+    }, firstPlanId);
+    assert.equal(stored.originalStatus, "ready");
+    assert.equal(stored.originalObservations, undefined);
+    assert.deepEqual(stored.originalResult, planResponse);
+    assert.equal(stored.basedOn, firstPlanId);
+    assert.equal(stored.newPhotoSize, stored.oldPhotoSize);
+  });
+
   if (process.env.REDSIDE_TEST_LEAFLET === "1") {
     await run("real Leaflet pin and facing arrow drag independently with Pages-path tile referrers", async () => {
       await page.evaluate(async () => {

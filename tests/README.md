@@ -27,6 +27,13 @@ actual service-worker offline reload. Worker requests are mocked: no API keys,
 passphrase, Mapbox account, or paid model calls are needed. Screenshots go in the
 ignored `test-results/` directory.
 
+Spot-description checks cover optional date/time, flow-relative facing, separate
+temperatures, draft preservation across navigation, offline queue payloads, safe
+display of notes, and a new analysis of a saved photo without replacing its
+original plan. `tests/spot-observations.test.mjs` checks input normalization and
+validation; Worker tests check that observations and evidence instructions reach
+the AI while old requests remain compatible.
+
 An additional real-Leaflet drag check fetches the public Leaflet 1.9.4 JavaScript
 and stylesheet from cdnjs, while mocking all Mapbox tiles and using a fake public
 token. Enable it with `REDSIDE_TEST_LEAFLET=1`. It verifies independent pin/arrow

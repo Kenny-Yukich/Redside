@@ -10,3 +10,5 @@ ALLOWED_ORIGIN = "https://kenny-yukich.github.io"
 
 # Set ANTHROPIC_API_KEY, MAPBOX_TOKEN, APP_PASSPHRASE with `wrangler secret put`.
 # Never add their values here.
+# For API keys that are not scoped to one Anthropic workspace, also set
+# ANTHROPIC_WORKSPACE_ID using `wrangler secret put ANTHROPIC_WORKSPACE_ID`.
