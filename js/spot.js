@@ -67,7 +67,8 @@ function renderComposer(root, status) {
     <div class="panel"><h2>1. Your photo</h2><div class="filter-row">
       <label class="btn primary spot-file">Take photo<input data-photo-camera type="file" accept="image/*" capture="environment"></label>
       <label class="btn ghost spot-file">Photo library<input data-photo-library type="file" accept="image/*"></label></div>
-      <div data-preview></div><p class="muted small">The original stays on your phone. We use a resized copy and never read location from the photo.</p></div>
+      <p data-photo-status role="status" aria-live="polite"></p>
+      <div data-preview></div><p class="muted small">Choose a JPG, PNG, or another image your browser can open. If an iPhone HEIC photo will not open, export a JPEG copy first. The original stays on your device.</p></div>
     <div class="panel"><h2>2. Position & facing</h2>
       <p class="muted small">Drag the pin to where you took the photo. Drag the gold arrow away from the pin in the direction you were facing. North is up.</p>
       <div class="spot-map" data-map aria-label="Satellite map: photo position and facing direction"></div>
@@ -87,6 +88,11 @@ function renderComposer(root, status) {
     <p class="muted small">Saved plans open offline. Queued photos run when signal returns while Redside is open; reopen the app to resume.</p>
   </form>`;
   const form = root.querySelector("form");
+  const photoStatus = message => {
+    if (disposed) return;
+    root.querySelector("[data-photo-status]").textContent = message;
+    status(message);
+  };
   const mapStatus = message => { if (!disposed) root.querySelector("[data-map-status]").textContent = message; };
   const mapError = message => {
     if (disposed) return;
@@ -190,14 +196,16 @@ function renderComposer(root, status) {
     positionRevision++;
     preparing = true;
     refreshControls();
-    status("Preparing your photo…");
+    photoStatus("Preparing your photo…");
     try {
       const media = await preparePhoto(file);
       if (disposed || revision !== photoRevision) return;
       draft.media = media; invalidateConfirmation(); drawPreview();
-      status("Photo ready. Confirm position and facing, then pick your target.");
+      photoStatus("Photo ready. Confirm position and facing, then pick your target.");
       if (manualRevision === manualPositionRevision) useGPS();
-    } catch (error) { if (revision === photoRevision) status(error.message); }
+    } catch (error) {
+      if (revision === photoRevision) photoStatus(`${error.message}${draft.media ? " Your previous photo is still selected." : " Choose another photo to continue."}`);
+    }
     finally {
       if (input.dataset.photoRevision === String(revision)) input.value = "";
       if (!disposed && revision === photoRevision) { preparing = false; refreshControls(); }

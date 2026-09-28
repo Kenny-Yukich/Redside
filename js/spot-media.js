@@ -80,7 +80,8 @@ function loadImage(blob) {
     image.onerror = () => {
       clearTimeout(timer);
       release();
-      reject(new Error("This browser could not open that photo. Try a JPEG or PNG copy."));
+      const heic = /\.(heic|heif)$/i.test(blob.name || "") || /image\/hei[cf]/i.test(blob.type || "");
+      reject(new Error(heic ? "This browser could not open your HEIC photo. Export it as JPEG or PNG, then choose that copy." : "This browser could not open that photo. Try a JPEG or PNG copy."));
     };
     image.src = url;
   });

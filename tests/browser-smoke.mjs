@@ -283,6 +283,29 @@ try {
 
   const photoDataURL = await page.evaluate(() => window.__spotFixtureUpload);
   const photoFile = { name: "shore.jpg", mimeType: "image/jpeg", buffer: Buffer.from(photoDataURL.split(",")[1], "base64") };
+  await run("desktop photo picker opens from the visible control and prepares a selected photo", async () => {
+    const desktop = await browser.newContext({viewport: {width: 1440, height: 1000}, serviceWorkers: "block"});
+    await desktop.route("**/*", route => new URL(route.request().url()).origin === origin ? route.continue() : route.abort());
+    const desktopPage = await desktop.newPage();
+    try {
+      await desktopPage.goto(appURL + "#/spot");
+      const chooserPromise = desktopPage.waitForEvent("filechooser", {timeout: 5000});
+      await desktopPage.locator(".spot-file").filter({has: desktopPage.locator("[data-photo-library]")}).click();
+      const chooser = await chooserPromise;
+      await chooser.setFiles(photoFile);
+      await desktopPage.waitForFunction(() => document.querySelector("[data-spot-status]")?.textContent.startsWith("Photo ready."));
+      assert.equal(await desktopPage.locator("[data-preview] img").isVisible(), true);
+      // A decode failure must be visible beside the picker and preserve the last good photo.
+      await desktopPage.locator("[data-photo-library]").setInputFiles({name: "unsupported.heic", mimeType: "image/heic", buffer: Buffer.from("invalid image")});
+      await desktopPage.waitForFunction(() => document.querySelector("[data-photo-status]")?.textContent.includes("Export it as JPEG"));
+      assert.match(await desktopPage.locator("[data-photo-status]").innerText(), /previous photo is still selected/);
+      assert.equal(await desktopPage.locator("[data-preview] img").isVisible(), true);
+      await desktopPage.locator("[data-photo-library]").setInputFiles(photoFile);
+      await desktopPage.waitForFunction(() => document.querySelector("[data-photo-status]")?.textContent.startsWith("Photo ready."));
+      await desktopPage.screenshot({path: resolve(root, "test-results/spot-upload-desktop.png"), animations: "disabled"});
+    } finally { await desktop.close(); }
+  });
+
   async function fillSpot() {
     await page.locator("[data-photo-library]").setInputFiles(photoFile);
     await page.locator("[data-spot-form]").waitFor();
