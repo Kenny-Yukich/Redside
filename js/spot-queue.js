@@ -37,17 +37,24 @@ async function drain() {
         signal: controller.signal,
       });
       const json = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(json.error || `Analysis failed (${response.status}). Check Settings and retry.`);
-      const result = validateResult(json, plan.grid, plan.inputs.tackle);
+      if (!response.ok) {
+        const fallback = { 401: "The app passphrase was not accepted. Update it in Settings to match your Worker.", 403: "The service refused access. Check the website allowed by your Worker.", 404: "The analysis service was not found. Check the full Worker URL in Settings and deploy the latest Worker.", 429: "The advisor is busy. Wait a minute before retrying.", 503: "The analysis service is not configured. Check the Worker secrets and deployment." };
+        const message = typeof json.error === "string" && json.error.length < 500 && !/[{}<>]/.test(json.error) ? json.error : null;
+        throw new Error(message || fallback[response.status] || "The analysis service could not finish. Your photo is saved. Check the service setup before retrying.");
+      }
+      let result;
+      try { result = validateResult(json, plan.grid, plan.inputs.tackle); }
+      catch { throw new Error("The advisor returned an incomplete fishing plan. Your photo is saved; try the analysis again."); }
       plan.result = result;
       plan.annotatedPhoto = null;
       plan.status = result.kind === "plan" ? "ready" : "question";
       plan.completedAt = Date.now();
     } catch (error) {
-      const network = error instanceof TypeError || !navigator.onLine;
+      const network = !navigator.onLine;
       plan.status = network ? "queued" : "error";
       plan.lastError = network ? "Waiting for a connection. If you have signal, check the Worker URL and allowed origin in Settings." :
-        error.name === "AbortError" ? "The analysis timed out. Your photo is saved; tap Retry when ready." : error.message;
+        error.name === "AbortError" ? "The analysis timed out. Your photo is saved; tap Retry when ready." :
+        error instanceof TypeError ? "Cannot reach the AI service. Check the full Worker URL in Settings, your connection, and that the Worker allows this Redside website. Your photo is saved; retry after fixing the connection." : error.message;
     } finally { clearTimeout(timer); }
     // Persist the small model result before allocating a PNG. A full device
     // must not send another paid request just because annotation storage fails.

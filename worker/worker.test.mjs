@@ -222,3 +222,21 @@ test("existing Ask endpoint keeps its answer shape and authentication", async ()
   });
   assert.equal(response.status, 200); assert.deepEqual(await response.json(), { answer: "Try Haystack today." });
 });
+
+
+test("provider failures identify the service and recovery without leaking upstream bodies", async () => {
+  for (const [service, status, expected] of [
+    ["mapbox", 401, /MAPBOX_TOKEN/], ["mapbox", 403, /no website URL restrictions/],
+    ["anthropic", 401, /ANTHROPIC_API_KEY/], ["anthropic", 402, /billing/],
+    ["anthropic", 404, /model is unavailable/], ["anthropic", 429, /usage limit/],
+  ]) {
+    const response = await handleRequest(request(), env, async url => {
+      if (service === "anthropic" && url.includes("mapbox.com")) return new Response("image", { headers: { "content-type": "image/jpeg" } });
+      return new Response("PRIVATE UPSTREAM BODY", { status });
+    });
+    const body = await response.json();
+    assert.match(body.error, expected);
+    assert.ok(!body.error.includes("PRIVATE"));
+    assert.equal(response.status, status === 429 && service === "anthropic" ? 429 : 502);
+  }
+});

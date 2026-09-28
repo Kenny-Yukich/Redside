@@ -8,8 +8,9 @@ function loadLeaflet() {
     const script = document.createElement("script");
     script.src = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js";
     script.crossOrigin = "anonymous";
-    script.onload = () => resolve(window.L);
-    script.onerror = () => { script.remove(); leafletPromise = null; reject(new Error("Map library unavailable. Reconnect to load satellite imagery.")); };
+    const timer = setTimeout(() => script.onerror(), 15000);
+    script.onload = () => { clearTimeout(timer); resolve(window.L); };
+    script.onerror = () => { clearTimeout(timer); script.remove(); leafletPromise = null; reject(new Error("Map library unavailable. Reconnect to load satellite imagery.")); };
     document.head.appendChild(script);
   });
   return leafletPromise;
@@ -23,7 +24,9 @@ export async function mountSpotMap(container, { lat, lon, heading, token, onPosi
     tileSize: 512, zoomOffset: -1, maxZoom: 20, referrerPolicy: "no-referrer-when-downgrade",
     attribution: '<a href="https://www.mapbox.com/about/maps/">© Mapbox</a> · <a href="https://www.openstreetmap.org/copyright">© OpenStreetMap</a> · <a href="https://apps.mapbox.com/feedback/">Improve this map</a>',
   }).addTo(map);
-  tiles.on("tileerror", () => onError("Satellite tiles unavailable. Check signal and the public Mapbox token in Settings."));
+  const tileTimer = setTimeout(() => onError("Satellite imagery is taking too long to load. Check your connection and retry the map."), 20000);
+  tiles.on("tileload", () => clearTimeout(tileTimer));
+  tiles.on("tileerror", () => onError("Mapbox could not load satellite imagery. Check your connection and the public map token in Settings. The token needs styles:tiles permission and must allow this website's address."));
   const pin = L.marker([lat, lon], { draggable: true, title: "Photo position: drag to move", icon: L.divIcon({ className: "spot-pin", html: '<span aria-hidden="true">●</span>', iconSize: [32, 32], iconAnchor: [16, 16] }) }).addTo(map);
   const arrow = L.marker(destination(lat, lon, heading || 0), { draggable: true, title: "Facing direction: drag this arrow", icon: L.divIcon({ className: "spot-arrow", html: '<span aria-hidden="true">➤</span>', iconSize: [44, 44], iconAnchor: [22, 22] }) }).addTo(map);
   const line = L.polyline([pin.getLatLng(), arrow.getLatLng()], { color: "#f9d76c", weight: 4 }).addTo(map);
@@ -49,5 +52,5 @@ export async function mountSpotMap(container, { lat, lon, heading, token, onPosi
   arrow.on("dragend", () => update(lat, lon, heading));
   update(lat, lon, heading);
   requestAnimationFrame(() => map.invalidateSize());
-  return { update, remove: () => map.remove() };
+  return { update, remove: () => { clearTimeout(tileTimer); map.remove(); } };
 }

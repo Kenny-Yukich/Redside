@@ -71,6 +71,7 @@ function renderComposer(root, status) {
     <div class="panel"><h2>2. Position & facing</h2>
       <p class="muted small">Drag the pin to where you took the photo. Drag the gold arrow away from the pin in the direction you were facing. North is up.</p>
       <div class="spot-map" data-map aria-label="Satellite map: photo position and facing direction"></div>
+      <div class="panel" data-map-error hidden role="alert"><h3>Satellite map unavailable</h3><p data-map-error-message></p><p>Your photo, GPS position, and heading are still available. Use the coordinate and heading fields below.</p><a class="spot-link" href="#/settings">Check map settings</a> <button class="btn ghost" type="button" data-map-retry>Retry map</button></div>
       <p class="muted small" data-map-status>Loading map…</p>
       <div class="filter-row"><button class="btn ghost" type="button" data-gps>Use live GPS</button><button class="btn ghost" type="button" data-compass>Use live compass</button></div>
       <div class="row2"><label>Latitude<input name="lat" type="number" step="any" min="-85" max="85" required></label><label>Longitude<input name="lon" type="number" step="any" min="-180" max="180" required></label></div>
@@ -87,6 +88,13 @@ function renderComposer(root, status) {
   </form>`;
   const form = root.querySelector("form");
   const mapStatus = message => { if (!disposed) root.querySelector("[data-map-status]").textContent = message; };
+  const mapError = message => {
+    if (disposed) return;
+    root.querySelector("[data-map]").hidden = true;
+    root.querySelector("[data-map-error]").hidden = false;
+    root.querySelector("[data-map-error-message]").textContent = message;
+    mapStatus("");
+  };
   function refreshControls() {
     if (disposed) return;
     form.querySelectorAll("input, button").forEach(control => { control.disabled = Boolean(draft.saving); });
@@ -242,18 +250,24 @@ function renderComposer(root, status) {
     } catch (error) { status(error.message); }
     finally { draft.saving = false; window.dispatchEvent(new Event("spot-draft-changed")); }
   };
-  requestAnimationFrame(async () => {
+  async function loadMap() {
     if (disposed) return;
-    if (!settings.mapboxToken) { mapStatus("Add a public Mapbox token in Settings to see satellite imagery. GPS and coordinate entry are available now."); return; }
+    map?.remove(); map = null;
+    root.querySelector("[data-map]").hidden = false;
+    root.querySelector("[data-map-error]").hidden = true;
+    mapStatus("Loading satellite map?");
+    if (!settings.mapboxToken) { mapError("Add a public Mapbox token in Settings to see satellite imagery. GPS and coordinate entry are available now."); return; }
     try {
       map = await mountSpotMap(root.querySelector("[data-map]"), { lat: draft.lat ?? HOME.lat, lon: draft.lon ?? HOME.lon, heading: draft.heading,
         token: settings.mapboxToken, onPosition: (lat, lon) => { if (draft.saving) { map?.update(draft.lat, draft.lon, draft.heading); return; } positionRevision++; manualPositionRevision++; draft.lat = lat; draft.lon = lon; form.elements.lat.value = lat.toFixed(6); form.elements.lon.value = lon.toFixed(6); invalidateConfirmation(); updateWater(); },
-        onHeading: heading => { if (draft.saving) { map?.update(draft.lat, draft.lon, draft.heading); return; } manuallyFaced = true; stopCompass(); draft.heading = heading; form.elements.heading.value = (Math.round(heading * 100) / 100) % 360; invalidateConfirmation(); }, onError: mapStatus });
+        onHeading: heading => { if (draft.saving) { map?.update(draft.lat, draft.lon, draft.heading); return; } manuallyFaced = true; stopCompass(); draft.heading = heading; form.elements.heading.value = (Math.round(heading * 100) / 100) % 360; invalidateConfirmation(); }, onError: mapError });
       if (disposed) { map?.remove(); return; }
       if (validPosition(draft.lat, draft.lon)) map?.update(draft.lat, draft.lon, draft.heading, true);
       mapStatus("Move the pin and drag the gold arrow to match your photo.");
-    } catch (error) { mapStatus(error.message); }
-  });
+    } catch (error) { mapError(error.message); }
+  }
+  root.querySelector("[data-map-retry]").onclick = loadMap;
+  requestAnimationFrame(loadMap);
   return () => { disposed = true; stopCompass(); window.removeEventListener("spot-draft-changed", refreshControls); map?.remove(); if (previewURL) URL.revokeObjectURL(previewURL); };
 }
 
@@ -269,7 +283,7 @@ function renderPlan(root, plan, status) {
   root.innerHTML = `<div class="panel"><strong>${esc(displayName(plan))}</strong><p class="muted small">${esc(new Date(plan.createdAt).toLocaleString())}</p>
     ${!ready ? `<p role="status">${esc(waiting[plan.status] || "Saved")}</p>` : ""}
     ${(!settings.workerUrl || !settings.passphrase) && !ready ? '<p>Add the Worker URL and app passphrase in <a class="spot-link" href="#/settings">Settings</a> to run this saved photo.</p>' : ""}
-    ${plan.lastError ? `<p role="alert">${esc(plan.lastError)}</p>` : ""}
+    ${plan.lastError ? `<div role="alert"><h2>Analysis needs attention</h2><p>${esc(plan.lastError)}</p><a class="spot-link" href="#/settings">Check connection settings</a></div>` : ""}
     <div class="spot-photo"><img src="${url(plan.photo)}" alt="Your fishing photo${ready ? ', with three numbered target zones' : ''}">
     ${ready ? result.zones.map(zone => { const point = cellCenter(zone.cell, plan.grid); return `<button type="button" class="spot-zone" data-zone="${zone.id}" style="left:${point.x * 100}%;top:${point.y * 100}%" aria-label="${zone.id}. ${esc(zone.title)}" aria-pressed="false">${zone.id}</button>`; }).join("") : ""}</div>
     ${ready ? `<div class="spot-legend">${result.zones.map(zone => `<button class="chip" type="button" data-select-zone="${zone.id}">${zone.id} · ${esc(zone.title)}</button>`).join("")}</div><div data-zone-detail aria-live="polite"></div>` : ""}
@@ -278,7 +292,7 @@ function renderPlan(root, plan, status) {
     ${ready ? `<div class="panel"><h2>If nothing’s happening</h2><p>${esc(result.fallback)}</p></div>
     <div class="panel"><h2>What I can see vs what I’m guessing</h2><h3>Visible evidence</h3><ul>${result.visible.map(item => `<li>${esc(item)}</li>`).join("")}</ul><h3>Guesses to check</h3><ul>${result.guesses.map(item => `<li>${esc(item)}</li>`).join("")}</ul><p class="muted small">Depth, fish presence, and current water level are uncertain. Overhead imagery may be years old; today’s shoreline can differ.</p></div>
     <div class="panel"><label class="spot-check"><input type="checkbox" data-include-location> Include water name & coordinates in shared photo</label><div class="filter-row"><button class="btn primary" data-share>Share photo</button><button class="btn ghost" data-tried>Tried it</button></div><div data-tried-container></div></div>` : ""}
-    <details class="panel spot-debug" data-debug><summary>Debug: grid & raw JSON</summary><img class="spot-preview" src="${url(plan.griddedPhoto)}" alt="Copy sent to the model, labeled with grid cells"><pre>${esc(JSON.stringify({ grid: plan.grid, inputs: plan.inputs, result: plan.result }, null, 2))}</pre></details>
+    <details class="panel" data-photo-details><summary>Saved photo details</summary><p>Your photo, location, and facing direction are saved on this device.</p><p>Target fish: ${esc(plan.inputs.species.join(", "))}</p><p>Facing: ${esc(Math.round(plan.inputs.heading))}&deg;</p></details>
     ${plan.status !== "analyzing" ? '<button class="btn ghost" data-delete-plan>Delete saved plan</button>' : ""}`;
   let retrying = false;
   async function retry(answer = null) {

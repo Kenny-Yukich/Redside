@@ -7,7 +7,9 @@ export function getSpotSettings() {
 export function saveSpotSettings(value) {
   const url = value.workerUrl.trim().replace(/\/+$/, "");
   if (url) {
-    const parsed = new URL(url);
+    let parsed;
+    try { parsed = new URL(url); } catch { throw new Error("Enter the full HTTPS Worker address shown after deployment."); }
+    if (parsed.hostname.endsWith(".workers.dev") && parsed.hostname.split(".").length < 4) throw new Error("The Worker URL is missing your account subdomain. Use https://redside-advisor.your-subdomain.workers.dev from your deployment output.");
     if (parsed.protocol !== "https:" && !(parsed.protocol === "http:" && ["localhost", "127.0.0.1"].includes(parsed.hostname))) throw new Error("Use an HTTPS Worker URL.");
     if (parsed.username || parsed.password || parsed.search || parsed.hash || parsed.pathname !== "/") throw new Error("Enter only the Worker origin, without a path or query.");
   }

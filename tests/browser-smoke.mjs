@@ -327,10 +327,10 @@ try {
     assert.ok((await page.locator("[data-plan-result]").innerText()).includes(planResponse.fallback));
     assert.ok((await page.locator("[data-plan-result]").innerText()).includes("What I can see"));
     assert.equal(await page.locator("[data-include-location]").isChecked(), false);
-    await page.locator("[data-debug] summary").click();
-    assert.ok((await page.locator("[data-debug]").innerText()).includes('"kind": "plan"'));
-    assert.ok(await page.locator("[data-debug] img").isVisible());
-    await page.locator("[data-debug] summary").click();
+    await page.locator("[data-photo-details] summary").click();
+    assert.ok((await page.locator("[data-photo-details]").innerText()).includes("Target fish:"));
+    assert.equal(await page.locator("[data-debug]").count(), 0);
+    await page.locator("[data-photo-details] summary").click();
     await mkdir(resolve(root, "test-results"), { recursive: true });
     await page.screenshot({ path: resolve(root, "test-results/spot-plan-mobile.png"), fullPage: true });
   });
@@ -507,6 +507,57 @@ try {
     await page.waitForFunction(() => document.querySelector("[data-share]")?.disabled === false);
     assert.equal(workerCalls.length, before + 1, "Opening the saved result regenerates its share PNG locally");
     await page.evaluate(async () => (await import("./js/spot-store.js")).deletePlan("quota-check"));
+  });
+
+  await run("online Worker failures stop for recovery and never display raw responses", async () => {
+    const errors = await page.evaluate(async id => {
+      const store = await import("./js/spot-store.js");
+      const queue = await import("./js/spot-queue.js");
+      const template = await store.getPlan(id);
+      const original = window.fetch;
+      const results = [];
+      try {
+        for (const mode of ["network", "html", "json"]) {
+          let calls = 0;
+          window.fetch = async () => {
+            calls++;
+            if (mode === "network") throw new TypeError("Failed to fetch");
+            return new Response(mode === "html" ? "<html>Server crash</html>" : JSON.stringify({error: {private: "raw payload"}}), {status: 502});
+          };
+          await store.savePlan({...template, id: "failure-check", status: "queued", result: null});
+          await queue.processSpotQueue();
+          await queue.processSpotQueue();
+          const plan = await store.getPlan("failure-check");
+          results.push({status: plan.status, message: plan.lastError, calls});
+        }
+      } finally { window.fetch = original; }
+      return results;
+    }, firstPlanId);
+    for (const error of errors) {
+      assert.equal(error.status, "error");
+      assert.equal(error.calls, 1);
+      assert.ok(!/[{}<>]/.test(error.message));
+    }
+    assert.match(errors[0].message, /Cannot reach the AI service/);
+    await page.goto(appURL + "#/spot/failure-check");
+    await page.getByRole("heading", {name: "Analysis needs attention"}).waitFor();
+    assert.equal(await page.locator("pre").count(), 0);
+    await page.screenshot({path: resolve(root, "test-results/spot-error-mobile.png"), fullPage: true});
+    await page.evaluate(async () => (await import("./js/spot-store.js")).deletePlan("failure-check"));
+  });
+
+  await run("missing map token replaces the map and keeps manual position controls", async () => {
+    await page.evaluate(async () => {
+      const settings = await import("./js/spot-settings.js");
+      settings.saveSpotSettings({...settings.getSpotSettings(), mapboxToken: ""});
+    });
+    await page.goto(appURL + "#/spot");
+    await page.locator("[data-map-error]").waitFor();
+    assert.equal(await page.locator("[data-map]").isVisible(), false);
+    assert.equal(await page.locator("[name=lat]").isVisible(), true);
+    assert.equal(await page.locator("[name=heading]").isVisible(), true);
+    await page.locator("[data-map-retry]").click();
+    assert.equal(await page.locator("[data-map-error]").isVisible(), true);
   });
 
   if (process.env.REDSIDE_TEST_LEAFLET === "1") {
