@@ -2,7 +2,7 @@
 // let live-data requests (USGS, Open-Meteo) go to the network and fail gracefully
 // (the app falls back to its own localStorage cache).
 
-const CACHE = "redside-v8";
+const CACHE = "redside-v9";
 const SHELL = [
   "./",
   "./index.html",
@@ -27,7 +27,7 @@ const SHELL = [
   "./assets/riverside-angler.jpg",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
-  "./icons/apple-touch-icon.png",
+  "./icons/apple-touch-icon.png?v=2",
 ];
 
 self.addEventListener("install", (e) => {
