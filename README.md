@@ -161,7 +161,8 @@ js/log.js                  local catch log with export/import
 js/app.js                  router + all views
 sw.js                      service worker (offline)
 manifest.webmanifest       install metadata
-icons/                     app icons
+icons/                     app icons (icon.svg is the master artwork)
+make_icons.mjs             redraws every icon size: node make_icons.mjs
 js/spot*.js               photo UI, map, device settings, queue, IndexedDB, media
 worker/                   authenticated Cloudflare Worker + deployment guide
 tests/                    image and browser checks
